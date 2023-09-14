@@ -1,0 +1,35 @@
+defaults:
+  - data/corpus: sfx-restaurant_train
+  - _self_
+
+random_seed: 42
+
+preprocessing:
+  text:
+    delexicalise:
+      mode: permutations # could also be strict
+      slots: [name, near]
+    tokenise: ExistingWhitespaceTokeniser
+
+pytorch:
+  device: cpu
+
+model:
+  name: sclstm_described
+  act_size: 9
+  slot_value_size: 15
+  embeddings:
+    mode: glove
+    dimensions: 80
+    backprop: True
+  num_hidden_dims: 80
+
+mode:
+  train:
+    num_epochs: 20
+    record_interval: 519
+    shuffle: True
+    batch_size: 1
+    optimizer: sgd
+    learning_rate: 0.1
+    learning_rate_decay: 0.5

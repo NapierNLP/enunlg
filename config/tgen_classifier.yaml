@@ -1,0 +1,35 @@
+defaults:
+  - data/corpus: e2e_train
+  - _self_
+
+preprocessing:
+  mr:
+    ignore_order: True
+    set_position: False
+  text:
+    delexicalise:
+      mode: split_on_caps # could also be strict
+      slots: [name, near]
+    tokenise: tgen
+
+pytorch:
+  device: cpu
+
+model:
+  name: tgen_classifier
+  max_mr_length: 30
+  text_encoder:
+    embeddings:
+      mode: random # could also be one-hot, word2vec, glove, zero, etc
+      dimensions: 50
+      backprop: True
+    cell: lstm
+    num_hidden_dims: 128
+
+mode:
+  train:
+    num_epochs: 20
+    batch_size: 1 # TGen used 20
+    optimizer: adam
+    learning_rate: 0.0005
+    learning_rate_decay: 0.5 # TGen used 0.0
