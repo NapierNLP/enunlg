@@ -8,7 +8,6 @@ do
 done
 
 DATASET=$1
-echo "Fetching ${DATASET}..."
 
 function fetch_dataset {
   case $1 in
@@ -42,13 +41,16 @@ function fetch_dataset {
   esac
 }
 
-if [[ ${SUPPORTED_DATASETS["${DATASET}"]} ]]
+if [ -v SUPPORTED_DATASETS["${DATASET}"] ]
 then
+  echo "Fetching ${DATASET}..."
   mkdir -p datasets/raw
   cd datasets/raw || exit
   pwd
   fetch_dataset "${DATASET}"
   cd -
 else
-  echo "No rule for fetching ${DATASET}"
+  echo "ERROR: No rule for fetching ${DATASET}"
+  exit 1
 fi
+
