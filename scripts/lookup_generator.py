@@ -1,9 +1,9 @@
 import enunlg.data_management.e2e_challenge as e2e
-import enunlg as lug
+import enunlg.templates.lookup as lug
 
 if __name__ == "__main__":
     print("Loading E2E Challenge Data")
-    splits =('trainset', )
+    splits = ('trainset', )
     e2e_corpus = e2e.load_e2e(splits)
     print("----")
     print("Training a one-to-many lookup generator")

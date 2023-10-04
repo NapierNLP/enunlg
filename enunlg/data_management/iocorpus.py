@@ -8,6 +8,9 @@ class IOPair:
     mr: Any
     text: str
 
+    def __getitem__(self, item):
+        return self.__getattribute__(self.__slots__[item])
+
     def __iter__(self):
         return iter((self.mr, self.text))
 
