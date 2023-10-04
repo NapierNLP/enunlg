@@ -23,14 +23,16 @@ We are using GitHub issues to track bugs and plan features and projects.
 0. Install `poetry` into your normal Python environment. `poetry` will manage dependencies and create a virtual environment for you.
 
        $ pip install poetry
+   
+   > Note: if you are on MacOS you may need to use [homebrew](https://brew.sh/) and run `brew install poetry` instead.
 
-1. Clone this repository.
+2. Clone this repository.
 
-       $ git clone git@github.com:ANONYMIZED/enlg.git
+       $ git clone git@github.com:NapierNLP/enunlg.git
 
-2. Edit `enlg/pyproject.toml`'s entry for `torch` to choose the version matching your environment (or find your own version of torch to use!)
+3. Edit `enlg/pyproject.toml`'s entry for `torch` to choose the version matching your environment (or find your own version of torch to use!)
 
-3. `cd` to the root of the cloned repository and run `poetry install`, which will install everything in `pyproject.toml` unless you have a `poetry.lock` file already
+4. `cd` to the root of the cloned repository and run `poetry install`, which will install everything in `pyproject.toml` unless you have a `poetry.lock` file already
 
        $ cd enlg
        $ poetry env use 3.9
