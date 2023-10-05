@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 
-@dataclass
+@dataclass(frozen=True)
 class EnrichedE2ESlotValuePair:
     class Meta:
         name = "inputType"
