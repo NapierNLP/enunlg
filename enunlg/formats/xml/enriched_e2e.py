@@ -139,9 +139,3 @@ class EnrichedE2EEntries:
             "type": "Element",
         }
     )
-
-
-@dataclass
-class Entries(EnrichedE2EEntries):
-    class Meta:
-        name = "entries"
