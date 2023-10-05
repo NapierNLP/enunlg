@@ -1,3 +1,11 @@
+"""
+IO data classes for the EnrichedE2E dataset.
+
+Use dataclasses.asdict() to get a JSON-able dict from this.
+Use xsdata.formats.dataclass.serializers.XmlSerializer() to generate XML outputs from this.
+"""
+
+
 from dataclasses import dataclass, field
 from typing import List, Optional
 
