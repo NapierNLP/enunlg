@@ -13,7 +13,7 @@ from typing import List, Optional
 @dataclass(frozen=True)
 class EnrichedE2ESlotValuePair:
     class Meta:
-        name = "inputType"
+        name = "input"
 
     attribute: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     tag: Optional[str] = field(default=None, metadata={"type": "Attribute"})
@@ -23,7 +23,7 @@ class EnrichedE2ESlotValuePair:
 @dataclass
 class EnrichedE2ESentenceGrouping:
     class Meta:
-        name = "sentenceType"
+        name = "sentence"
 
     content: List[object] = field(
         default_factory=list,
@@ -44,12 +44,14 @@ class EnrichedE2ESentenceGrouping:
 @dataclass
 class EnrichedE2ESource:
     class Meta:
-        name = "sourceType"
+        name = "source"
 
-    input: List[EnrichedE2ESlotValuePair] = field(
+    inputs: List[EnrichedE2ESlotValuePair] = field(
         default_factory=list,
         metadata={
+            "name": "input",
             "type": "Element",
+            "min_occurs": 1
         }
     )
 
@@ -57,12 +59,14 @@ class EnrichedE2ESource:
 @dataclass
 class EnrichedE2EContentPlan:
     class Meta:
-        name = "structuringType"
+        name = "structuring"
 
-    sentence: List[EnrichedE2ESentenceGrouping] = field(
+    sentences: List[EnrichedE2ESentenceGrouping] = field(
         default_factory=list,
         metadata={
+            "name": "sentence",
             "type": "Element",
+            "min_occurs": 1
         }
     )
 
@@ -70,7 +74,7 @@ class EnrichedE2EContentPlan:
 @dataclass
 class EnrichedE2ETarget:
     class Meta:
-        name = "targetType"
+        name = "target"
 
     annotator: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     comment: Optional[str] = field(default=None, metadata={"type": "Attribute"})
@@ -109,7 +113,7 @@ class EnrichedE2ETarget:
 @dataclass
 class EnrichedE2EEntry:
     class Meta:
-        name = "entryType"
+        name = "entry"
 
     eid: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     size: Optional[str] = field(default=None, metadata={"type": "Attribute"})
@@ -117,13 +121,15 @@ class EnrichedE2EEntry:
         default=None,
         metadata={
             "type": "Element",
-            "required": True,
+            "required": True
         }
     )
-    target: List[EnrichedE2ETarget] = field(
+    targets: List[EnrichedE2ETarget] = field(
         default_factory=list,
         metadata={
+            "name": "target",
             "type": "Element",
+            "min_occurs": 1
         }
     )
 
@@ -131,11 +137,12 @@ class EnrichedE2EEntry:
 @dataclass
 class EnrichedE2EEntries:
     class Meta:
-        name = "entriesType"
+        name = "entries"
 
-    entry: List[EnrichedE2EEntry] = field(
+    entries: List[EnrichedE2EEntry] = field(
         default_factory=list,
         metadata={
+            "name": "entry",
             "type": "Element",
         }
     )
