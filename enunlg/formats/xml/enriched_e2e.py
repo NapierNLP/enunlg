@@ -15,24 +15,9 @@ class EnrichedE2ESlotValuePair:
     class Meta:
         name = "inputType"
 
-    attribute: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
-    tag: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
-    value: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
+    attribute: Optional[str] = field(default=None, metadata={"type": "Attribute"})
+    tag: Optional[str] = field(default=None, metadata={"type": "Attribute"})
+    value: Optional[str] = field(default=None,metadata={"type": "Attribute"})
 
 
 @dataclass
@@ -87,6 +72,10 @@ class EnrichedE2ETarget:
     class Meta:
         name = "targetType"
 
+    annotator: Optional[str] = field(default=None, metadata={"type": "Attribute"})
+    comment: Optional[str] = field(default=None, metadata={"type": "Attribute"})
+    lid: Optional[str] = field(default=None, metadata={"type": "Attribute"})
+    ref: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     structuring: Optional[EnrichedE2EContentPlan] = field(
         default=None,
         metadata={
@@ -115,30 +104,6 @@ class EnrichedE2ETarget:
             "required": True,
         }
     )
-    annotator: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
-    comment: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
-    lid: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
-    ref: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
 
 
 @dataclass
@@ -146,6 +111,8 @@ class EnrichedE2EEntry:
     class Meta:
         name = "entryType"
 
+    eid: Optional[str] = field(default=None, metadata={"type": "Attribute"})
+    size: Optional[str] = field(default=None, metadata={"type": "Attribute"})
     source: Optional[EnrichedE2ESource] = field(
         default=None,
         metadata={
@@ -157,18 +124,6 @@ class EnrichedE2EEntry:
         default_factory=list,
         metadata={
             "type": "Element",
-        }
-    )
-    eid: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-        }
-    )
-    size: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
         }
     )
 
