@@ -56,26 +56,117 @@ class PipelineCorpusMapper(object):
         logging.info('successful init')
 
     def __call__(self, input_corpus):
-        logging.info('successful call')
+        logging.debug('successful call')
         if isinstance(input_corpus, self.input_format):
-            logging.info('passed the format check')
+            logging.debug('passed the format check')
             output_seq = []
             for entry in input_corpus:
                 output = []
                 for layer in self.annotation_layer_mappings:
-                    logging.info(f"processing {layer}")
+                    logging.debug(f"processing {layer}")
                     output.append(self.annotation_layer_mappings[layer](entry))
                 max_length = max([len(x) for x in output])
                 output = [x * max_length if len(x) == 1 else x for x in output]
                 assert all([len(x) == max_length for x in output]), f"expected all layers to have the same number of items, but received: {[len(x) for x in output]}"
+                for i in range(max_length-1):
+                    item = self.output_format({key: output[idx][i] for idx, key in enumerate(self.annotation_layer_mappings.keys())})
+                    output_seq.append(item)
                 output_seq.append(output)
-                logging.info(len(output_seq))
-            return self.output_format(output_seq)
+                logging.debug(f"Num entries so far: {len(output_seq)}")
+            return output_seq
         else:
             raise TypeError(f"Cannot run {self.__class__} on {type(input_corpus)}")
 
 
-def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_config: Optional[box.Box] = None) -> EnrichedE2ECorpusRaw:
+class EnrichedE2EItem(object):
+    def __init__(self, layers: dict):
+        sanitized_layer_names = [layer_name.replace("-", "_") for layer_name in layers.keys()]
+        self.layers = sanitized_layer_names
+        for new_name, layer in zip(sanitized_layer_names, layers):
+            self.__setattr__(new_name, layers[layer])
+
+    def __getitem__(self, item):
+        return self.__getattribute__(item)
+
+    def __repr__(self):
+        attr_string = ", ".join([f"{layer}={str(self[layer])}" for layer in self.layers])
+        return f"{self.__class__.__name__}({attr_string})"
+
+
+class EnrichedE2ECorpus(enunlg.data_management.iocorpus.IOCorpus):
+    def __init__(self, seq: List[EnrichedE2EItem]):
+        if seq:
+            layer_names = seq[0].layers
+            try:
+                for idx, item in enumerate(seq):
+                    if isinstance(item, list):
+                        print(idx)
+                        print(item)
+                        raise AttributeError
+                assert all([item.layers == layer_names for item in seq]), f"Expected all items in seq to have the layers: {layer_names}"
+            except AttributeError:
+                raise
+            self.layers = layer_names
+        super(EnrichedE2ECorpus, self).__init__(seq)
+
+    @property
+    def views(self):
+        return [(l1, l2) for l1, l2 in zip(self.layers, self.layers[1:])]
+
+
+def extract_raw_input(entry):
+    mr = {}
+    for input in entry.source.inputs:
+        mr[input.attribute] = input.value
+    return [box.Box(mr)]
+
+
+def extract_selected_input(entry):
+    targets = []
+    for target in entry.targets:
+        mr = {}
+        for sentence in target.structuring.sentences:
+            for input in sentence.content:
+                mr[input.attribute] = input.value
+        targets.append(box.Box(mr))
+    return targets
+
+
+def extract_ordered_input(entry):
+    targets = []
+    for target in entry.targets:
+        selected_inputs = []
+        for sentence in target.structuring.sentences:
+            mr = {}
+            for input in sentence.content:
+                mr[input.attribute] = input.value
+            selected_inputs.append(box.Box(mr))
+        targets.append(selected_inputs)
+    return targets
+
+
+def extract_sentence_segmented_input(entry):
+    targets = []
+    for target in entry.targets:
+        selected_inputs = []
+        for sentence in target.structuring.sentences:
+            mr = {}
+            for input in sentence.content:
+                mr[input.attribute] = input.value
+            selected_inputs.append(box.Box(mr))
+        targets.append(selected_inputs)
+    return targets
+
+
+def extract_lexicalization(entry):
+    return [target.lexicalization for target in entry.targets]
+
+
+def extract_raw_output(entry):
+    return [target.text for target in entry.targets]
+
+
+def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_config: Optional[box.Box] = None) -> EnrichedE2ECorpus:
     """
 
     :param splits: which splits to load
@@ -104,45 +195,15 @@ def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_confi
     logging.info(len(corpus))
     #lambda entry: [x.sentence.content for x in entry.targets.structuring]
 
-    def extract_raw_input(entry):
-        mr = {}
-        for input in entry.source.inputs:
-            mr[input.attribute] = input.value
-        return [box.Box(mr)]
-
-    def extract_ordered_input(entry):
-        targets = []
-        for target in entry.targets:
-            selected_inputs = []
-            for sentence in target.structuring.sentences:
-                selected_inputs.extend(sentence.content)
-            targets.append(selected_inputs)
-        return targets
-
-    def extract_sentence_segmented_input(entry):
-        targets = []
-        for target in entry.targets:
-            selected_inputs = []
-            for sentence in target.structuring.sentences:
-                selected_inputs.append(sentence.content)
-            targets.append(selected_inputs)
-        return targets
-
-    def extract_lexicalization(entry):
-        return [target.lexicalization for target in entry.targets]
-
-    def extract_raw_output(entry):
-        return [target.text for target in entry.targets]
-
-    enriched_e2e_factory = PipelineCorpusMapper(EnrichedE2ECorpusRaw, enunlg.data_management.iocorpus.IOCorpus,
+    enriched_e2e_factory = PipelineCorpusMapper(EnrichedE2ECorpusRaw, EnrichedE2EItem,
                                                 {'raw-input': lambda entry: extract_raw_input(entry),
-                                                 'selected-input': lambda entry: [set(x) for x in extract_ordered_input(entry)],
+                                                 'selected-input': extract_selected_input,
                                                  'ordered-input': extract_ordered_input,
                                                  'sentence-segmented-input': extract_sentence_segmented_input,
                                                  'lexicalisation': extract_lexicalization,
                                                  'referring-expressions': lambda x: [None],
                                                  'raw-output': extract_raw_output})
-    logging.info(len(corpus))
-    corpus = enriched_e2e_factory(corpus)
-    logging.info(len(corpus))
+
+    corpus = EnrichedE2ECorpus(enriched_e2e_factory(corpus))
+    logging.info(f"Corpus contains {len(corpus)} entries.")
     return corpus
