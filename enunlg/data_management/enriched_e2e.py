@@ -1,17 +1,18 @@
+from collections import defaultdict
 from typing import Callable, Dict, Iterable, List, Optional, Union
 
+import difflib
 import logging
 import os
+import random
 
-import box
 import omegaconf
 import xsdata.formats.dataclass.parsers as xsparsers
 
 from enunlg.formats.xml.enriched_e2e import EnrichedE2EEntries
+from enunlg.meaning_representation.slot_value import SlotValueMR
 import enunlg.data_management.iocorpus
 import enunlg.data_management.pipelinecorpus
-
-logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
 
 # TODO add hydra configuration for enriched e2e stuff
 ENRICHED_E2E_CONFIG = omegaconf.DictConfig({'ENRICHED_E2E_DIR': os.path.join(os.path.dirname(__file__),
@@ -22,6 +23,31 @@ E2E_SPLIT_DIRS = ('train', 'dev', 'test')
 DELEX_LABELS = ["__AREA__", "__CUSTOMER_RATING__", "__EATTYPE__", "__FAMILYFRIENDLY__", "__FOOD__", "__NAME__",
                 "__NEAR__", "__PRICERANGE__"]
 
+DIFFER = difflib.Differ()
+
+
+def extract_reg_from_template_and_text(text, template):
+    diff = DIFFER.compare(text, template)
+    keys = []
+    values = []
+    curr_add = []
+    curr_min = []
+    for x in diff:
+        if x.startswith('-'):
+            curr_min.append(x[2])
+        elif x.startswith('+'):
+            curr_add.append(x[2])
+        else:
+            if curr_min:
+                values.append("".join(curr_min))
+                curr_min = []
+            if curr_add:
+                keys.append("".join(curr_add))
+                curr_add = []
+    result_dict = defaultdict(list)
+    for key, value in zip(keys, values):
+        result_dict[key].append(value)
+    return result_dict
 
 class EnrichedE2ECorpusRaw(enunlg.data_management.iocorpus.IOCorpus):
     def __init__(self, seq: Optional[Iterable] = None, filename_or_list: Optional[Union[str, List[str]]] = None):
@@ -53,10 +79,9 @@ class PipelineCorpusMapper(object):
         self.input_format = input_format
         self.output_format = output_format
         self.annotation_layer_mappings = annotation_layer_mappings
-        logging.info('successful init')
 
-    def __call__(self, input_corpus):
-        logging.debug('successful call')
+    def __call__(self, input_corpus: Iterable) -> List:
+        logging.debug(f'successful call to {self.__class__.__name__} as a function (rather than a class)')
         if isinstance(input_corpus, self.input_format):
             logging.debug('passed the format check')
             output_seq = []
@@ -65,13 +90,16 @@ class PipelineCorpusMapper(object):
                 for layer in self.annotation_layer_mappings:
                     logging.debug(f"processing {layer}")
                     output.append(self.annotation_layer_mappings[layer](entry))
-                max_length = max([len(x) for x in output])
-                output = [x * max_length if len(x) == 1 else x for x in output]
-                assert all([len(x) == max_length for x in output]), f"expected all layers to have the same number of items, but received: {[len(x) for x in output]}"
-                for i in range(max_length-1):
+                # EnrichedE2E-formated datasets have up to N distinct targets for each single input
+                # This will show up as the first 'layer' having length 1 and subsequent layers having length > 1
+                num_targets = max([len(x) for x in output])
+                # We expand any layers of length 1, duplicating their entries, and preserving the rest of the layers
+                output = [x * num_targets if len(x) == 1 else x for x in output]
+                assert all([len(x) == num_targets for x in output]), f"expected all layers to have the same number of items, but received: {[len(x) for x in output]}"
+                # For each of the N distinct targets, create a self.outputformat object and append it to the output_seq
+                for i in range(num_targets-1):
                     item = self.output_format({key: output[idx][i] for idx, key in enumerate(self.annotation_layer_mappings.keys())})
                     output_seq.append(item)
-                output_seq.append(output)
                 logging.debug(f"Num entries so far: {len(output_seq)}")
             return output_seq
         else:
@@ -97,15 +125,7 @@ class EnrichedE2ECorpus(enunlg.data_management.iocorpus.IOCorpus):
     def __init__(self, seq: List[EnrichedE2EItem]):
         if seq:
             layer_names = seq[0].layers
-            try:
-                for idx, item in enumerate(seq):
-                    if isinstance(item, list):
-                        print(idx)
-                        print(item)
-                        raise AttributeError
-                assert all([item.layers == layer_names for item in seq]), f"Expected all items in seq to have the layers: {layer_names}"
-            except AttributeError:
-                raise
+            assert all([item.layers == layer_names for item in seq]), f"Expected all items in seq to have the layers: {layer_names}"
             self.layers = layer_names
         super(EnrichedE2ECorpus, self).__init__(seq)
 
@@ -113,12 +133,16 @@ class EnrichedE2ECorpus(enunlg.data_management.iocorpus.IOCorpus):
     def views(self):
         return [(l1, l2) for l1, l2 in zip(self.layers, self.layers[1:])]
 
+    def items_by_view(self, view):
+        for item in self:
+            yield item[view[0]], item[view[1]]
+
 
 def extract_raw_input(entry):
     mr = {}
     for input in entry.source.inputs:
         mr[input.attribute] = input.value
-    return [box.Box(mr)]
+    return [SlotValueMR(mr, frozen_box=True)]
 
 
 def extract_selected_input(entry):
@@ -128,7 +152,7 @@ def extract_selected_input(entry):
         for sentence in target.structuring.sentences:
             for input in sentence.content:
                 mr[input.attribute] = input.value
-        targets.append(box.Box(mr))
+        targets.append(SlotValueMR(mr, frozen_box=True))
     return targets
 
 
@@ -140,8 +164,8 @@ def extract_ordered_input(entry):
             mr = {}
             for input in sentence.content:
                 mr[input.attribute] = input.value
-            selected_inputs.append(box.Box(mr))
-        targets.append(selected_inputs)
+            selected_inputs.append(SlotValueMR(mr, frozen_box=True))
+        targets.append(tuple(selected_inputs))
     return targets
 
 
@@ -153,8 +177,8 @@ def extract_sentence_segmented_input(entry):
             mr = {}
             for input in sentence.content:
                 mr[input.attribute] = input.value
-            selected_inputs.append(box.Box(mr))
-        targets.append(selected_inputs)
+            selected_inputs.append(SlotValueMR(mr, frozen_box=True))
+        targets.append(tuple(selected_inputs))
     return targets
 
 
@@ -162,15 +186,29 @@ def extract_lexicalization(entry):
     return [target.lexicalization for target in entry.targets]
 
 
+def extract_reg_completed_lex_random(entry):
+    texts = [target.text for target in entry.targets]
+    templates = [target.template for target in entry.targets]
+    texts_templates = zip(texts, templates)
+    lexes = [target.lexicalization for target in entry.targets]
+    regged_lexes = []
+    for pair, lex in zip(texts_templates, lexes):
+        reg_dict = extract_reg_from_template_and_text(pair[0], pair[1])
+        for key in reg_dict:
+            lex = lex.replace(key, random.choice(reg_dict[key]))
+        regged_lexes.append(lex)
+    return regged_lexes
+
+
 def extract_raw_output(entry):
     return [target.text for target in entry.targets]
 
 
-def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_config: Optional[box.Box] = None) -> EnrichedE2ECorpus:
+def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_config: Optional[SlotValueMR] = None) -> EnrichedE2ECorpus:
     """
 
     :param splits: which splits to load
-    :param enriched_e2e_config: a box.Box or omegaconf.DictConfig like object containing the basic
+    :param enriched_e2e_config: a SlotValueMR or omegaconf.DictConfig like object containing the basic
                                 information about the e2e corpus to be used
     :return: the corpus of MR-text pairs with metadata
     """
@@ -201,7 +239,7 @@ def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_confi
                                                  'ordered-input': extract_ordered_input,
                                                  'sentence-segmented-input': extract_sentence_segmented_input,
                                                  'lexicalisation': extract_lexicalization,
-                                                 'referring-expressions': lambda x: [None],
+                                                 'referring-expressions': extract_reg_completed_lex_random,
                                                  'raw-output': extract_raw_output})
 
     corpus = EnrichedE2ECorpus(enriched_e2e_factory(corpus))
