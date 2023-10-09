@@ -17,6 +17,9 @@ ENRICHED_E2E_CONFIG = box.Box({'ENRICHED_E2E_DIR': os.path.join(os.path.dirname(
 
 E2E_SPLIT_DIRS = ('train', 'dev', 'test')
 
+DELEX_LABELS = ["__AREA__", "__CUSTOMER_RATING__", "__EATTYPE__", "__FAMILYFRIENDLY__", "__FOOD__", "__NAME__",
+                "__NEAR__", "__PRICERANGE__"]
+
 
 class EnrichedE2ECorpusRaw(enunlg.data_management.iocorpus.IOCorpus):
     def __init__(self, seq: Optional[Iterable] = None, filename_or_list: Optional[Union[str, List[str]]] = None):
@@ -55,11 +58,11 @@ class PipelineCorpusMapper(object):
         if isinstance(input_corpus, self.input_format):
             logging.info('passed the format check')
             output_seq = []
-            for x in input_corpus:
+            for entry in input_corpus:
                 output = []
                 for layer in self.annotation_layer_mappings:
                     logging.info(f"processing {layer}")
-                    output.append(self.annotation_layer_mappings[layer](x))
+                    output.append(self.annotation_layer_mappings[layer](entry))
                 max_length = max([len(x) for x in output])
                 output = [x * max_length if len(x) == 1 else x for x in output]
                 assert all([len(x) == max_length for x in output]), f"expected all layers to have the same number of items, but received: {[len(x) for x in output]}"
@@ -99,6 +102,12 @@ def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_confi
     logging.info(len(corpus))
     #lambda entry: [x.sentence.content for x in entry.targets.structuring]
 
+    def extract_raw_input(entry):
+        mr = {}
+        for input in entry.source.inputs:
+            mr[input.attribute] = input.value
+        return [box.Box(mr)]
+
     def extract_ordered_input(entry):
         targets = []
         for target in entry.targets:
@@ -124,7 +133,7 @@ def load_enriched_e2e(splits: Optional[Iterable[str]] = None, enriched_e2e_confi
         return [target.text for target in entry.targets]
 
     enriched_e2e_factory = PipelineCorpusMapper(EnrichedE2ECorpusRaw, enunlg.data_management.iocorpus.IOCorpus,
-                                                {'raw-input': lambda entry: [entry.source.inputs],
+                                                {'raw-input': lambda entry: extract_raw_input(entry),
                                                  'selected-input': lambda entry: [set(x) for x in extract_ordered_input(entry)],
                                                  'ordered-input': extract_ordered_input,
                                                  'sentence-segmented-input': extract_sentence_segmented_input,
