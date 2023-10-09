@@ -5,6 +5,7 @@ import csv
 import os
 
 import box
+import omegaconf
 import regex
 
 import enunlg.data_management.iocorpus as iocorpus
@@ -13,9 +14,10 @@ import enunlg.data_management.iocorpus as iocorpus
 E2E_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/e2e-dataset/')
 E2E_CLEANED_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/e2e-cleaning/cleaned-data/')
 
-E2E_CONFIG = box.Box({'E2E_DIR': os.path.join(os.path.dirname(__file__), '../../datasets/raw/e2e-dataset/'),
-                      'E2E_CLEANED_DIR': os.path.join(os.path.dirname(__file__),
-                                                      '../../datasets/raw/e2e-cleaning/cleaned-data/')})
+E2E_CONFIG = omegaconf.DictConfig({'E2E_DIR': os.path.join(os.path.dirname(__file__),
+                                                           '../../datasets/raw/e2e-dataset/'),
+                                   'E2E_CLEANED_DIR': os.path.join(os.path.dirname(__file__),
+                                                                   '../../datasets/raw/e2e-cleaning/cleaned-data/')})
 
 E2E_SPLITS = ('trainset', 'devset', 'testset_w_refs')
 E2E_CLEANED_SPLITS = ('train-fixed.no-ol', 'devel-fixed.no-ol', 'test-fixed')
@@ -95,7 +97,7 @@ def load_e2e_csv(filepath: str) -> List[Tuple[str, str]]:
 
 def load_e2e(splits: Optional[Iterable[str]] = None,
              original: bool = True,
-             e2e_config: Optional[box.Box] = None) -> E2ECorpus:
+             e2e_config: Optional[omegaconf.DictConfig] = None) -> E2ECorpus:
     """
 
     :param splits: which splits to load

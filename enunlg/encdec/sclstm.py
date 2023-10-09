@@ -8,12 +8,12 @@ if TYPE_CHECKING:
     import enunlg.embeddings.onehot
 
 import random
+
+import omegaconf
 import torch
 import torch.jit
 import torch.nn
 import torch.nn.functional
-
-import box
 
 import enunlg.embeddings.glove
 
@@ -265,15 +265,15 @@ class SCLSTMLayer(torch.nn.Module):
         return torch.stack(outputs), state
 
 
-SCLSTM_DESCRIBED_CONFIG = box.Box({"name": "sclstm",
-                                   "mr_size": 24,  # based on Wen et al. SFX Restaurant data
-                                   "embeddings":
-                                       {"mode": "random",  # could also be one-hot, word2vec, glove, zero, etc
-                                        "dimensions": 80,
-                                        "backprop": True
-                                        },
-                                   "num_hidden_dims": 80
-                                   })
+SCLSTM_DESCRIBED_CONFIG = omegaconf.DictConfig({"name": "sclstm",
+                                                "mr_size": 24,  # based on Wen et al. SFX Restaurant data
+                                                "embeddings":
+                                                    {"mode": "random",  # could also be one-hot, word2vec, glove, zero, etc
+                                                     "dimensions": 80,
+                                                    "backprop": True
+                                                     },
+                                                "num_hidden_dims": 80
+                                                })
 SCLSTM_RELEASED_CONFIG = SCLSTM_DESCRIBED_CONFIG
 del SCLSTM_RELEASED_CONFIG.mr_size
 # based on Wen et al. SFX Restaurant data, as above

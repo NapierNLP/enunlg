@@ -3,8 +3,7 @@ from typing import List, Optional, Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
-import box
-
+import omegaconf
 import torch
 import torch.nn
 import torch.nn.functional
@@ -126,26 +125,26 @@ class TGenEncDec(torch.nn.Module):
         super().__init__()
         if model_config is None:
             # Set defaults
-            model_config = box.Box({'name': 'tgen',
-                                    'max_input_length': 30,
-                                    'encoder':
-                                        {'embeddings':
-                                            {'mode': 'random',
-                                             'dimensions': 50,
-                                             'backprop': True
-                                             },
-                                         'cell': 'lstm',
-                                         'num_hidden_dims': 50},
-                                    'decoder':
-                                        {'embeddings':
-                                            {'mode': 'random',
-                                             'dimensions': 50,
-                                             'backprop': True
-                                             },
-                                         'cell': 'lstm',
-                                         'num_hidden_dims': 50
-                                         }
-                                    })
+            model_config = omegaconf.DictConfig({'name': 'tgen',
+                                                 'max_input_length': 30,
+                                                 'encoder':
+                                                     {'embeddings':
+                                                          {'mode': 'random',
+                                                           'dimensions': 50,
+                                                           'backprop': True
+                                                           },
+                                                      'cell': 'lstm',
+                                                      'num_hidden_dims': 50},
+                                                 'decoder':
+                                                     {'embeddings':
+                                                          {'mode': 'random',
+                                                           'dimensions': 50,
+                                                           'backprop': True
+                                                           },
+                                                      'cell': 'lstm',
+                                                      'num_hidden_dims': 50
+                                                      }
+                                                 })
         self.config = model_config
 
         # Set basic properties

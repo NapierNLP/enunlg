@@ -1,7 +1,7 @@
 """Lookup templates use MRs as keys and texts as values."""
 
 from collections import defaultdict
-from typing import Hashable, Iterable, Tuple
+from typing import Any, Hashable, Iterable, Tuple
 
 import abc
 import random
@@ -12,7 +12,7 @@ class LookupGenerator(abc.ABC):
     def _add_io_pair(self, pair) -> None:
         pass
 
-    def train(self, pairs: Iterable[Tuple[Hashable, str]]) -> None:
+    def train(self, pairs: Iterable[Tuple[Hashable, Any]]) -> None:
         for pair in pairs:
             self._add_io_pair(pair)
 
@@ -31,10 +31,10 @@ class OneToOneLookupGenerator(LookupGenerator):
         """
         self._mapping = {}
 
-    def _add_io_pair(self, io_pair: Tuple[Hashable, str]) -> None:
+    def _add_io_pair(self, io_pair: Tuple[Hashable, Any]) -> None:
         self._mapping[io_pair[0]] = io_pair[1]
 
-    def train(self, pairs: Iterable[Tuple[Hashable, str]]) -> None:
+    def train(self, pairs: Iterable[Tuple[Hashable, Any]]) -> None:
         for pair in pairs:
             self._add_io_pair(pair)
 
@@ -52,8 +52,8 @@ class OneToManyLookupGenerator(LookupGenerator):
         """
         self._mapping = defaultdict(list)
 
-    def _add_io_pair(self, io_pair: Tuple[Hashable, str]) -> None:
+    def _add_io_pair(self, io_pair: Tuple[Hashable, Any]) -> None:
         self._mapping[io_pair[0]].append(io_pair[1])
 
-    def predict(self, mr: Hashable) -> str:
+    def predict(self, mr: Hashable) -> Any:
         return random.choice(self._mapping[mr])

@@ -2,6 +2,8 @@ import csv
 import os
 
 from collections import namedtuple
+
+import omegaconf
 from pyparsing import alphanums, Forward, OneOrMore, Suppress, Word, ZeroOrMore
 from typing import Iterable, List, Optional, Tuple
 
@@ -11,7 +13,7 @@ import enunlg.data_management.iocorpus as iocorpus
 
 # TODO add hydra configuration for neural methodius stuff!
 NEURAL_METHODIUS_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/methodiusNeuralINLG2021/corpus/')
-NEURAL_METHODIUS_CONFIG = box.Box({'NEURAL_METHODIUS_DIR': NEURAL_METHODIUS_DIR})
+NEURAL_METHODIUS_CONFIG = omegaconf.DictConfig({'NEURAL_METHODIUS_DIR': NEURAL_METHODIUS_DIR})
 NEURAL_METHODIUS_SPLITS = ('train_without_few', 'valid', 'test')
 
 RSTNode = namedtuple("Node", ["value", "children"])
@@ -70,7 +72,7 @@ def load_neural_methodius_tsv(filepath: str) -> List[Tuple[str, str]]:
 
 
 def load_neural_methodius(splits: Optional[Iterable[str]] = None,
-                          neural_methodius_config: Optional[box.Box] = None) -> MethodiusCorpus:
+                          neural_methodius_config: Optional[omegaconf.DictConfig] = None) -> MethodiusCorpus:
     """
 
     :param splits: which splits to load
