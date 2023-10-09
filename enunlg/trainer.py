@@ -6,7 +6,7 @@ from typing import List, Optional, Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
-import box
+import omegaconf
 import sacrebleu.metrics as sm
 import torch
 
@@ -65,14 +65,14 @@ class SCLSTMTrainer(BasicTrainer):
                  training_config=None):
         if training_config is None:
             # Set defaults
-            training_config = box.Box({"num_epochs": 20,
-                                    "record_interval": 519,
-                                    "shuffle": True,
-                                    "batch_size": 1,
-                                    "optimizer": "sgd",
-                                    "learning_rate": 0.1,
-                                    "learning_rate_decay": 0.5
-                                       })
+            training_config = omegaconf.DictConfig({"num_epochs": 20,
+                                                    "record_interval": 519,
+                                                    "shuffle": True,
+                                                    "batch_size": 1,
+                                                    "optimizer": "sgd",
+                                                    "learning_rate": 0.1,
+                                                    "learning_rate_decay": 0.5
+                                                    })
         super().__init__(model, training_config)
 
         # Re-initialize loss using summation instead of mean
@@ -131,14 +131,14 @@ class TGenTrainer(BasicTrainer):
                  training_config=None):
         if training_config is None:
             # Set defaults
-            training_config = box.Box({"num_epochs": 20,
-                                    "record_interval": 1000,
-                                    "shuffle": True,
-                                    "batch_size": 1,
-                                    "optimizer": "adam",
-                                    "learning_rate": 0.0005,
-                                    "learning_rate_decay": 0.5 # TGen used 0.0
-                                    })
+            training_config = omegaconf.DictConfig({"num_epochs": 20,
+                                                    "record_interval": 1000,
+                                                    "shuffle": True,
+                                                    "batch_size": 1,
+                                                    "optimizer": "adam",
+                                                    "learning_rate": 0.0005,
+                                                    "learning_rate_decay": 0.5 # TGen used 0.0
+                                                   })
         super().__init__(model, training_config)
         self._early_stopping_scores = [float('-inf')] * 5
         self._early_stopping_scores_changed = -1

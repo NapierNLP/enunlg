@@ -4,6 +4,7 @@ import logging
 import os
 
 import box
+import omegaconf
 import xsdata.formats.dataclass.parsers as xsparsers
 
 from enunlg.formats.xml.enriched_e2e import EnrichedE2EEntries
@@ -13,7 +14,8 @@ import enunlg.data_management.pipelinecorpus
 logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
 
 # TODO add hydra configuration for enriched e2e stuff
-ENRICHED_E2E_CONFIG = box.Box({'ENRICHED_E2E_DIR': os.path.join(os.path.dirname(__file__), '../../datasets/raw/EnrichedE2E/')})
+ENRICHED_E2E_CONFIG = omegaconf.DictConfig({'ENRICHED_E2E_DIR': os.path.join(os.path.dirname(__file__),
+                                                                             '../../datasets/raw/EnrichedE2E/')})
 
 E2E_SPLIT_DIRS = ('train', 'dev', 'test')
 

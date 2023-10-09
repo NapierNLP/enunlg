@@ -7,7 +7,7 @@ from typing import List, TYPE_CHECKING
 if TYPE_CHECKING:
     import enunlg.embeddings.onehot
 
-import box
+import omegaconf
 import torch
 import torch.nn
 
@@ -21,7 +21,7 @@ class TGenSemClassifier(torch.nn.Module):
         super().__init__()
         if model_config is None:
             # Set defaults
-            model_config = box.Box({'name': 'tgen_classifier',
+            model_config = omegaconf.DictConfig({'name': 'tgen_classifier',
                                     'max_mr_length': 30,
                                     'text_encoder':
                                         {'embeddings':
