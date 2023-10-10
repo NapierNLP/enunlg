@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Definitions
+
 declare -A SUPPORTED_DATASETS=()
 for LABEL in cacapo cued e2e e2e-cleaned e2e-enriched neural-methodius webnlg2023 webnlg-enriched
 do
   SUPPORTED_DATASETS["${LABEL}"]=1
 done
-
-DATASET=$1
 
 function fetch_dataset {
   case $1 in
@@ -41,6 +41,23 @@ function fetch_dataset {
   esac
 }
 
+function usage {
+    echo "Usage:    ./fetch_dataset.bash DATASET"
+    echo ""
+    echo "DATASET can be cacapo, cued, e2e, e2e-cleaned, e2e-enriched, neural-methodius, webnlg2023, or webnlg-enriched"
+    echo ""
+    }
+
+if [ "$#" -lt 1 ]
+then
+    echo "Script requires at least one argument, a DATASET to fetch."
+    echo ""
+    usage
+    exit 1
+fi
+
+DATASET=$1
+
 if [ -v SUPPORTED_DATASETS["${DATASET}"] ]
 then
   echo "Fetching ${DATASET}..."
@@ -50,7 +67,9 @@ then
   fetch_dataset "${DATASET}"
   cd -
 else
-  echo "ERROR: No rule for fetching ${DATASET}"
-  exit 1
+    echo ""
+    echo "ERROR: No rule for fetching ${DATASET}"
+    usage
+    exit 1
 fi
 
