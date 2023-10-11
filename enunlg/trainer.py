@@ -202,7 +202,8 @@ class TGenTrainer(BasicTrainer):
             ref_outputs.append(self.model.output_vocab.pretty_string(out_indices.tolist()))
         # Calculate BLEU compared to targets
         bleu = sm.BLEU()
-        bleu_score = bleu.corpus_score(best_outputs, ref_outputs)
+        # We only have one reference per output
+        bleu_score = bleu.corpus_score(best_outputs, [ref_outputs])
         logging.info(f"Current score: {bleu_score}")
         if bleu_score.score > self._early_stopping_scores[-1]:
             self._early_stopping_scores.append(bleu_score.score)
