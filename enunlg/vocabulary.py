@@ -252,6 +252,14 @@ class TokenVocabulary(object):
         return self._max_index
 
     @property
+    def size(self):
+        return self._max_index + 1
+
+    @property
+    def size(self):
+        return self._max_index + 1
+
+    @property
     def stop_token_int(self):
         return self._token2int['<STOP>']
 
