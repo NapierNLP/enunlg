@@ -1,75 +1,14 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from decimal import Decimal
+from typing import List, Optional, Union
+
+import logging
+
+from xsdata.models.datatype import XmlDate
+
+logger = logging.getLogger(__name__)
 
 
-@dataclass
-class Dbpedialink:
-    class Meta:
-        name = "dbpedialink"
-
-    direction: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-            "required": True,
-        }
-    )
-    value: str = field(
-        default="",
-        metadata={
-            "required": True,
-        }
-    )
-
-
-
-@dataclass
-class Link:
-    class Meta:
-        name = "link"
-
-    direction: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-            "required": True,
-        }
-    )
-    value: str = field(
-        default="",
-        metadata={
-            "required": True,
-        }
-    )
-
-
-
-@dataclass
-class Dbpedialinks:
-    class Meta:
-        name = "dbpedialinks"
-
-    dbpedialink: List[Dbpedialink] = field(
-        default_factory=list,
-        metadata={
-            "type": "Element",
-            "min_occurs": 1,
-        }
-    )
-
-
-@dataclass
-class Links:
-    class Meta:
-        name = "links"
-
-    link: List[Link] = field(
-        default_factory=list,
-        metadata={
-            "type": "Element",
-            "min_occurs": 1,
-        }
-    )
 
 
 @dataclass
@@ -93,6 +32,7 @@ class ModifiedTripleSet:
     class Meta:
         name = "modifiedtripleset"
 
+    # TODO change the name of mtriple to reflect that it's a list of mtriples
     mtriple: List[str] = field(
         default_factory=list,
         metadata={
@@ -118,6 +58,48 @@ class OriginalTripleSet:
 
 
 @dataclass
+class Reference:
+    class Meta:
+        name = "reference"
+
+    entity: Optional[Union[str, float, int]] = field(
+        default=None,
+        metadata={
+            "type": "Attribute",
+            "required": True,
+        }
+    )
+    number: Optional[int] = field(
+        default=None,
+        metadata={
+            "type": "Attribute",
+            "required": True,
+        }
+    )
+    tag: Optional[str] = field(
+        default=None,
+        metadata={
+            "type": "Attribute",
+            "required": True,
+        }
+    )
+    type_value: Optional[str] = field(
+        default=None,
+        metadata={
+            "name": "type",
+            "type": "Attribute",
+            "required": True,
+        }
+    )
+    value: Union[str, float, int, XmlDate, Decimal] = field(
+        default="",
+        metadata={
+            "required": True,
+        }
+    )
+
+
+@dataclass
 class SentenceGrouping:
     """EnrichedWebNLG-style set of triples which should be expressed in a single sentence."""
     class Meta:
@@ -135,6 +117,20 @@ class SentenceGrouping:
         default_factory=list,
         metadata={
             "type": "Element",
+        }
+    )
+
+
+@dataclass
+class References:
+    class Meta:
+        name = "references"
+
+    reference: List[Reference] = field(
+        default_factory=list,
+        metadata={
+            "type": "Element",
+            "min_occurs": 1,
         }
     )
 
@@ -167,13 +163,6 @@ class Lex:
             "required": True,
         }
     )
-    lang: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-            "required": False,
-        }
-    )
     lid: Optional[str] = field(
         default=None,
         metadata={
@@ -181,50 +170,38 @@ class Lex:
             "required": True,
         }
     )
-    tree: List[str] = field(
-        default_factory=list,
+    sortedtripleset: SortedTripleSet = field(
+        default=None,
         metadata={
             "type": "Element",
-            "min_occurs": 1,
-            "sequence": 1,
-        }
-    )
-    sortedtripleset: List[SortedTripleSet] = field(
-        default_factory=list,
-        metadata={
-            "type": "Element",
-            "min_occurs": 1,
-            "sequence": 1,
-        }
-    )
-    references: List[object] = field(
-        default_factory=list,
-        metadata={
-            "type": "Element",
-            "min_occurs": 1,
-            "sequence": 1,
-        }
-    )
-    text: List[str] = field(
-        default_factory=list,
-        metadata={
-            "type": "Element",
-            "min_occurs": 1,
-            "sequence": 1,
-        }
-    )
-    template: List[str] = field(
-        default_factory=list,
-        metadata={
-            "type": "Element",
-            "min_occurs": 1,
-            "sequence": 1,
-        }
-    )
-    value: str = field(
-        default="",
-        metadata={
             "required": True,
+        }
+    )
+    references: Optional[References] = field(
+        default=None,
+        metadata={
+            "type": "Element",
+            "required": True,
+        }
+    )
+    text: Optional[str] = field(
+        default=None,
+        metadata={
+            "type": "Element",
+            "required": True,
+        }
+    )
+    template: Optional[str] = field(
+        default=None,
+        metadata={
+            "type": "Element",
+            "required": True,
+        }
+    )
+    lexicalization: Optional[str] = field(
+        default=None,
+        metadata={
+            "type": "Element",
         }
     )
 
@@ -268,20 +245,6 @@ class EnrichedWebNLGEntry:
             "required": True,
         }
     )
-    shape: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-            "required": True,
-        }
-    )
-    shape_type: Optional[str] = field(
-        default=None,
-        metadata={
-            "type": "Attribute",
-            "required": True,
-        }
-    )
     size: Optional[int] = field(
         default=None,
         metadata={
@@ -289,11 +252,11 @@ class EnrichedWebNLGEntry:
             "required": True,
         }
     )
-    originaltripleset: List[OriginalTripleSet] = field(
-        default=list,
+    originaltripleset: Optional[OriginalTripleSet] = field(
+        default=None,
         metadata={
             "type": "Element",
-            "min_occurs": 1,
+            "required": True,
         }
     )
     modifiedtripleset: Optional[ModifiedTripleSet] = field(
@@ -318,18 +281,6 @@ class EnrichedWebNLGEntry:
         }
     )
 
-    dbpedialinks: Optional[Dbpedialinks] = field(
-        default=None,
-        metadata={
-            "type": "Element",
-        }
-    )
-    links: Optional[Links] = field(
-        default=None,
-        metadata={
-            "type": "Element",
-        }
-    )
 
 @dataclass
 class EnrichedWebNLGEntries:

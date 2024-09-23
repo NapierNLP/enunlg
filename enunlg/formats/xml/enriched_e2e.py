@@ -9,6 +9,10 @@ Use xsdata.formats.dataclass.serializers.XmlSerializer() to generate XML outputs
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class EnrichedE2ESlotValuePair:
