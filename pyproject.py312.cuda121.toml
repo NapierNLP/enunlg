@@ -7,8 +7,7 @@ license = "Apache 2.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "~3.9"
-torch = "1.9.1"
+python = "~3.12"
 conda-lock = "^2.5.6"
 regex = "^2023.12.25"
 numpy = "^1.26.4"
@@ -25,17 +24,32 @@ sacrebleu = "^2.4.1"
 lxml = "^5.1.0"
 xsdata = {extras = ["lxml"], version = "^24.3.1"}
 tensorboard = "2.15.1"
+# Uncomment the torch line relevant to your environment!
+# Live dangerously and let poetry try to find something; this didn't work for me
+#torch = "^1.9.0+cpu"
+# Torch 1.9.1 on CPU-only for Python 3.9 on 64-bit Linux
+#torch = {url="https://download.pytorch.org/whl/cpu/torch-1.9.1%2Bcpu-cp39-cp39-linux_x86_64.whl"}
+# Torch 1.9.1 on CPU-only for Python 3.9 on 64-bit Windows
+#torch = {url="https://download.pytorch.org/whl/cpu/torch-1.9.1%2Bcpu-cp39-cp39-win_amd64.whl"}
+# Torch 1.9.1 on CPU-only for Python 3.9 on 64-bit Intel CPU MacOSX 10
+#torch = {url="https://download.pytorch.org/whl/cpu/torch-1.9.1-cp39-none-macosx_10_9_x86_64.whl"}
+# Torch 1.9.1 on CPU-only for Python 3.9 on 64-bit ARM MacOSX 11
+#torch = {url="https://download.pytorch.org/whl/cpu/torch-1.9.1-cp39-none-macosx_11_0_arm64.whl"}
+# Torch 1.9.1 on CPU-only for Python 3.9 on 64-bit Linux with CUDA 11
+# torch = {url="https://download.pytorch.org/whl/cu111/torch-1.9.0%2Bcu111-cp39-cp39-linux_x86_64.whl"}
+# torch = {url="https://download.pytorch.org/whl/cpu-cxx11-abi/torch-2.2.1%2Bcpu.cxx11.abi-cp312-cp312-linux_x86_64.whl"}
+torch = {url="https://download.pytorch.org/whl/cu121/torch-2.3.0%2Bcu121-cp312-cp312-linux_x86_64.whl#sha256=f15b6f549eebc6e6b22b26754e4f1d7e4469bcd2d4ba1eaab57268ad80bcca96"}
 setuptools = "59.5.0"
 submitit = "^1.5.1"
 hydra-submitit-launcher = "^1.2.0"
 sparqlwrapper = "^2.0.0"
-ipynb = "^0.5.1"
+bert-score = "^0.3.13"
 
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.6.1"
 pytest = "^5.2"
-scalene = "^1.5.13"
+#scalene = "^1.5.13"
 types-regex = "^2023.10.3.0"
 types-lxml = "^2023.10.21"
 stanza = "^1.7.0"

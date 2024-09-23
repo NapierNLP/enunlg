@@ -29,7 +29,6 @@ setuptools = "59.5.0"
 submitit = "^1.5.1"
 hydra-submitit-launcher = "^1.2.0"
 sparqlwrapper = "^2.0.0"
-ipynb = "^0.5.1"
 
 
 [tool.poetry.group.dev.dependencies]
