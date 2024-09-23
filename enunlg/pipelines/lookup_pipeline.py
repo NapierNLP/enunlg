@@ -1,27 +1,26 @@
-from dataclasses import asdict
-
 import logging
-logging.basicConfig(encoding='utf-8', level=logging.INFO)
 
 import enunlg.data_management.enriched_e2e as ee2e
 import enunlg.templates.lookup as lug
 
+logger = logging.getLogger(__name__)
+
 
 class PipelineLookupGenerator(object):
     def __init__(self, corpus: ee2e.EnrichedE2ECorpus):
-        self.layers = corpus.layers
-        self.pipeline = corpus.views
+        self.layers = corpus.annotation_layers
+        self.pipeline = corpus.layer_pairs
         self.modules = {layer_pair: lug.OneToManyLookupGenerator() for layer_pair in self.pipeline}
         for layer_pair in self.modules:
-            self.modules[layer_pair].train(corpus.items_by_view(layer_pair))
+            self.modules[layer_pair].train(corpus.items_by_layer_pair(layer_pair))
 
     def predict(self, mr):
         curr_input = mr
         for layer_pair in self.modules:
-            logging.debug(layer_pair)
-            logging.debug(curr_input)
+            logger.debug(layer_pair)
+            logger.debug(curr_input)
             curr_output = self.modules[layer_pair].predict(curr_input)
-            logging.debug(curr_output)
+            logger.debug(curr_output)
             curr_input = curr_output
         return curr_output
 
