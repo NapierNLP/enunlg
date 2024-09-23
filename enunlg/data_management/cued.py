@@ -1,8 +1,9 @@
+from pathlib import Path
 from typing import Dict, Iterable, Optional
 
 import itertools
 import json
-import os
+import logging
 
 import box
 import regex
@@ -10,15 +11,17 @@ import regex
 import enunlg.data_management.iocorpus as iocorpus
 import enunlg.meaning_representation.dialogue_acts as da_lib
 
-SFX_RESTAURANT_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/raw/RNNLG/data/original/restaurant')
-SFX_HOTEL_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/raw/RNNLG/data/original/hotel')
-LAPTOP_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/raw/RNNLG/data/original/laptop')
-TV_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/raw/RNNLG/data/original/tv')
+logger = logging.getLogger(__name__)
 
-WEN_ET_AL_DATASETS: Dict[str, str] = {"sfx_restaurant": SFX_RESTAURANT_DIR,
-                                      "sfx_hotel": SFX_HOTEL_DIR,
-                                      "laptop": LAPTOP_DIR,
-                                      "tv": TV_DIR}
+SFX_RESTAURANT_DIR = Path(__file__).parent / '../../datasets/raw/RNNLG/data/original/restaurant'
+SFX_HOTEL_DIR = Path(__file__).parent / '../../datasets/raw/RNNLG/data/original/hotel'
+LAPTOP_DIR = Path(__file__).parent / '../../datasets/raw/RNNLG/data/original/laptop'
+TV_DIR = Path(__file__).parent / '../../datasets/raw/RNNLG/data/original/tv'
+
+WEN_ET_AL_DATASETS: Dict[str, Path] = {"sfx_restaurant": SFX_RESTAURANT_DIR,
+                                       "sfx_hotel": SFX_HOTEL_DIR,
+                                       "laptop": LAPTOP_DIR,
+                                       "tv": TV_DIR}
 
 CUED_SPLITS = ('train', 'valid', 'test')
 
@@ -43,6 +46,25 @@ class CUEDCorpus(iocorpus.IOCorpus):
     def __init__(self, seq: Iterable[CUEDPair]):
         super().__init__(seq)
 
+    def print_summary_stats(self):
+        print(f"{self.metadata=}")
+        print(f"num entries: {len(self)}")
+        mr_lengths = []
+        mr_types = set()
+        text_lengths = []
+        text_types = set()
+        for item in self:
+            mr_lengths.append(len(item.mr))
+            mr_types.add(item.mr)
+            text_lengths.append(len(item.text.split()))
+            text_types.add(tuple(item.text.split()))
+        
+        print(f"MRs:\t\t{sum(mr_lengths)/len(mr_lengths):.2f} [{min(mr_lengths)},{max(mr_lengths)}]")
+        print(f"    with {len(mr_types)} types across {len(mr_lengths)} tokens.")
+        print("NB: these values don't tokenize MRs")
+
+        print(f"Texts:\t\t{sum(text_lengths)/len(text_lengths):.2f} [{min(text_lengths)},{max(text_lengths)}]")
+        print(f"    with {len(text_types)} types across {len(text_lengths)} tokens.")
 
 def parse_cued_dialogue_acts(dialogue_act_string, keep_values=False):
     """Adapted from RNNLG/loader/data_reader.py DialogueActParser.parse()"""
@@ -61,7 +83,7 @@ def parse_cued_dialogue_acts(dialogue_act_string, keep_values=False):
             for key, vals in SCLSTM_SPECIAL.items():
                 if v in vals:  # unify the special values
                     v = key
-            if not v in SCLSTM_SPECIAL and not keep_values:  # delexicalisation
+            if v not in SCLSTM_SPECIAL and not keep_values:  # delexicalisation
                 v = '_'
             slot_value_list.append((s, v))
     return da_lib.MultivaluedDA.from_slot_value_list(act_type, slot_value_list)
@@ -110,11 +132,11 @@ def multivalued_da_to_cued_mr_string(multida: da_lib.MultivaluedDA, combine_mult
     for slot in multida.slot_values:
         if slot is not None:
             if combine_multi_valued_slots:
-                value_string = " or ".join([value for value in multida.slot_values[slot]])
+                value_string = " or ".join(list(multida.slot_values[slot]))
                 if value_string == "?":
                     fields.append(slot)
                     continue
-                if " " in value_string or all([c.isdigit() for c in value_string]):
+                if " " in value_string or all(c.isdigit() for c in value_string):
                     if "'" in value_string:
                         value_string = f'"{value_string}"'
                     else:
@@ -125,7 +147,7 @@ def multivalued_da_to_cued_mr_string(multida: da_lib.MultivaluedDA, combine_mult
                     if value_string == "?":
                         fields.append(slot)
                         continue
-                    if " " in value_string or all([c.isdigit() for c in value_string]):
+                    if " " in value_string or all(c.isdigit() for c in value_string):
                         if "'" in value_string:
                             value_string = f'"{value_string}"'
                         else:
@@ -136,7 +158,7 @@ def multivalued_da_to_cued_mr_string(multida: da_lib.MultivaluedDA, combine_mult
 
 def load_cued_json(filepath, includes_comment_header=True):
     """Load a JSON file, potentially ignoring the 5 line comment header used by Wen et al."""
-    with open(filepath) as input_file:
+    with Path(filepath).open() as input_file:
         if includes_comment_header:
             for _ in range(5):
                 next(input_file)
@@ -150,20 +172,23 @@ def load_cued_data(filepath, includes_comment_header=True, human_ref_only=True):
                            for da, human_ref, _ in data])
     else:
         # TODO create a way to load triples or to alternatively load the handcrafted-rule-based reference sents.
-        raise NotImplementedError("No implementation for Wen et al. triples yet.")
+        message = "No implementation for Wen et al. triples yet."
+        raise NotImplementedError(message)
 
 
 def load_wen_et_al_dataset(name: str, splits=None):
     data_directory = WEN_ET_AL_DATASETS.get(name)
     if data_directory is None:
-        raise ValueError(f"`name` can only be one of {list(WEN_ET_AL_DATASETS.keys())}. Got {name}")
+        message = f"`name` can only be one of {list(WEN_ET_AL_DATASETS.keys())}. Got {name}"
+        raise ValueError(message)
     if splits is None:
         splits = CUED_SPLITS
     elif not set(splits).issubset(CUED_SPLITS):
-        raise ValueError(f"`splits` can only contain a subset of {CUED_SPLITS}. Found {splits}.")
+        message = f"`splits` can only contain a subset of {CUED_SPLITS}. Found {splits}."
+        raise ValueError(message)
     corpus = CUEDCorpus([])
     for split in splits:
-        corpus.extend(load_cued_data(os.path.join(data_directory, f'{split}.json')))
+        corpus.extend(load_cued_data(Path(data_directory) / f'{split}.json'))
     corpus.metadata = {'name': name,
                        'splits': splits,
                        'directory': data_directory}
