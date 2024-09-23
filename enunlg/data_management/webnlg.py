@@ -1,14 +1,17 @@
 """Code for working with WebNLG datasets as described at https://synalp.gitlabpages.inria.fr/webnlg-challenge/docs/"""
 
-from typing import Optional, Union
+from typing import List, Optional, Union
 
+import logging
 import os
 
 from lxml import etree
 
 import enunlg.data_management.iocorpus
 
-WEBNLG_2023_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/2023-Challenge/data/')
+logger = logging.getLogger(__name__)
+
+WEBNLG_2023_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/raw/2023-Challenge/data/')
 
 
 class RDFTriple(object):
@@ -17,6 +20,7 @@ class RDFTriple(object):
         self.subject = subj
         self.predicate = pred
         self.object = obj
+        self.relex_dict = {}
 
     def __repr__(self):
         return f"RDFTriple({self.subject}, {self.predicate}, {self.object})"
@@ -27,7 +31,18 @@ class RDFTriple(object):
     @staticmethod
     def from_string(triple: str) -> "RDFTriple":
         subj, pred, obj = triple.split(" | ")
-        return RDFTriple(subj, pred, obj)
+        return RDFTriple(subj.strip('"'), pred.strip('"'), obj.strip('"'))
+
+    def delex_reference(self, entity, sem_class):
+        if entity == self.subject:
+            self.relex_dict[sem_class] = entity
+            self.subject = self.subject.replace(entity, sem_class)
+        if entity == self.object:
+            self.relex_dict[sem_class] = entity
+            self.object = self.object.replace(entity, sem_class)
+
+    def can_delex(self, entity: str) -> bool:
+        return entity == self.subject or entity == self.object
 
 
 class RDFTripleSet(set):
@@ -38,6 +53,21 @@ class RDFTripleSet(set):
 class RDFTripleList(list):
     def __init__(self, seq):
         super().__init__(seq)
+
+    def delex_reference(self, entity, sem_class):
+        if self.can_delex(entity):
+            for triple in self:
+                triple.delex_reference(entity, sem_class)
+
+    def can_delex(self, entity: str) -> bool:
+        return any([triple.can_delex(entity) for triple in self])
+
+    def find_pred_for_object(self, entity: str) -> Optional[str]:
+        for triple in self:
+            if triple.object == entity:
+                return triple.predicate
+        # print(entity)
+        # print(self)
 
 
 class WebNLGLex(object):
@@ -66,15 +96,17 @@ class RDFPair(enunlg.data_management.iocorpus.IOPair):
     def rdf(self, value):
         self.mr = value
 
-    def sort_mr(self, in_place: bool = True) -> Optional[dict]:
+    def sort_mr(self, in_place: bool = True) -> Optional[RDFTripleList]:
         # We'll use a list instead of a set for the ordered version
         sorted_mr = RDFTripleList(sorted(self.mr, key=lambda x: (x.predicate, x.subject, x.object)))
         if in_place:
             self.mr = sorted_mr
         else:
             return sorted_mr
+        # Added for PEP8 consistency and mypy happiness
+        return None
 
-    def sort_rdf(self, in_place: bool = True) -> Optional[dict]:
+    def sort_rdf(self, in_place: bool = True) -> Optional[RDFTripleList]:
         return self.sort_mr(in_place)
 
 
@@ -107,22 +139,25 @@ class WebNLGEntry(object):
             if child.tag == 'originaltripleset':
                 triples = [RDFTriple.from_string(triple.text) for triple in child]
                 if len(triples) != reported_size:
-                    raise ValueError(f"Size mismatch. <entry> reports size {reported_size} but found {len(triples)} triples.")
+                    message = f"Size mismatch. <entry> reports size {reported_size} but found {len(triples)} triples."
+                    raise ValueError(message)
                 self.original_tripleset = RDFTripleSet(triples)
             elif child.tag == 'modifiedtripleset':
                 triples = [RDFTriple.from_string(triple.text) for triple in child]
                 if len(triples) != reported_size:
-                    raise ValueError(f"Size mismatch. <entry> reports size {reported_size} but found {len(triples)} triples.")
+                    message = f"Size mismatch. <entry> reports size {reported_size} but found {len(triples)} triples."
+                    raise ValueError(message)
                 self.modified_tripleset = RDFTripleSet(triples)
             elif child.tag == 'lex':
                 self.texts.append(WebNLGLex.from_xml(child))
             else:
-                raise ValueError(f"Unexpected child of the XML <entry> with tag: <{child.tag}>")
+                message = f"Unexpected child of the XML <entry> with tag: <{child.tag}>"
+                raise ValueError(message)
 
 
 class WebNLGCorpus(object):
-    def __init__(self, filename: Optional[str]=None) -> None:
-        self.entries = []
+    def __init__(self, filename: Optional[str] = None) -> None:
+        self.entries: List[WebNLGEntry] = []
         if filename is not None:
             self.add_entries_from_file(filename)
 
