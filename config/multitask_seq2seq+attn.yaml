@@ -1,0 +1,99 @@
+defaults:
+  - data/corpus: enriched-e2e
+  - _self_
+random_seed: 42
+pytorch:
+  device: cpu
+data:
+  input_mode: e2e
+  drop_intermediate_layers: False
+  preprocessing:
+    delexicalise: True
+model:
+  name: multitask_seq2seq+attn
+  max_input_length: 45
+  encoder:
+    embeddings:
+      type: "torch"
+      embedding_dim: 64
+      backprop: True
+    cell: lstm
+    num_hidden_dims: 128
+  decoder_selected_input:
+    embeddings:
+      type: "torch"
+      embedding_dim: 64
+      backprop: True
+      padding_idx: 0
+      start_idx: 1
+      stop_idx: 2
+    cell: lstm
+    num_hidden_dims: 128
+  decoder_ordered_input:
+    embeddings:
+      type: "torch"
+      embedding_dim: 64
+      backprop: True
+      padding_idx: 0
+      start_idx: 1
+      stop_idx: 2
+    cell: lstm
+    num_hidden_dims: 128
+  decoder_sentence_segmented_input:
+    embeddings:
+      type: "torch"
+      embedding_dim: 64
+      backprop: True
+      padding_idx: 0
+      start_idx: 1
+      stop_idx: 2
+    cell: lstm
+    num_hidden_dims: 128
+  decoder_lexicalisation:
+    embeddings:
+      type: "torch"
+      embedding_dim: 64
+      backprop: True
+      padding_idx: 0
+      start_idx: 1
+      stop_idx: 2
+    cell: lstm
+    num_hidden_dims: 128
+  decoder_referring_expressions:
+    embeddings:
+      type: "torch"
+      embedding_dim: 64
+      backprop: True
+      padding_idx: 0
+      start_idx: 1
+      stop_idx: 2
+    cell: lstm
+    num_hidden_dims: 128
+  decoder_raw_output:
+    embeddings:
+      type: "torch"
+      embedding_dim: 64
+      backprop: True
+      padding_idx: 0
+      start_idx: 1
+      stop_idx: 2
+    cell: lstm
+    num_hidden_dims: 128
+
+mode: train
+
+train:
+  num_epochs: 20
+  record_interval: 0.2
+  shuffle: True
+  batch_size: 1
+  optimizer: adam
+  learning_rate: 0.001
+  learning_rate_decay: 0.5
+  train_splits: [train]
+  dev_splits: [dev]
+
+test:
+  generator_file: trained_MultitaskSeq2SeqGenerator.pt.tgz
+  classifier_file: models/e2e.semclassifier.nlg.tgz
+  test_splits: [test]
