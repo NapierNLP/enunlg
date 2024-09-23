@@ -1,0 +1,8 @@
+name: e2e
+display_name: E2E Challenge Corpus
+load_type: csv
+load_dir: '../../datasets/raw/e2e-dataset/'
+splits:
+  train: [trainset.csv]
+  dev: [devset.csv]
+  test: [testset_w_refs.csv]

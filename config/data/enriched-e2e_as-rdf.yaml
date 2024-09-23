@@ -1,0 +1,7 @@
+defaults:
+  - corpus: enriched-e2e
+  - _self_
+
+input_mode: rdf
+preprocessing:
+  delexicalise: True

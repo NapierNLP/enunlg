@@ -1,0 +1,40 @@
+defaults:
+  - _self_
+
+random_seed: 42
+pytorch:
+  device: cpu
+model:
+  name: seq2seq+attn
+  max_input_length: 26
+  encoder:
+    embeddings:
+      type: torch
+      embedding_dim: 16
+      backprop: True
+    cell: lstm
+    num_hidden_dims: 64
+  decoder:
+    embeddings:
+      type: torch
+      embedding_dim: 16
+      backprop: True
+      padding_idx: 0
+      start_idx: 1
+      stop_idx: 2
+    cell: lstm
+    num_hidden_dims: 64
+
+mode: train
+
+train:
+  num_epochs: 20
+  record_interval: 100
+  shuffle: True
+  batch_size: 1
+  optimizer: adam
+  learning_rate: 0.001
+  learning_rate_decay: 0.5
+
+test:
+  model_file: seq2seq+attn.pt

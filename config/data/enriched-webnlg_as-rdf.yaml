@@ -1,0 +1,7 @@
+defaults:
+  - corpus: enriched-webnlg
+  - _self_
+
+input_mode: rdf
+preprocessing:
+  delexicalise: with-dbpedia-sem-classes

@@ -1,0 +1,12 @@
+# Use the same name we use in fetch-dataset.bash
+name: e2e-enriched
+display_name: "Enriched E2E"
+load_type: xml_dirs
+# Relative to the enunlg.data_management library
+# Will work for repos cloned from github but not if we release a library/module
+load_dir: '../../datasets/processed/EnrichedE2E/'
+# Splits defines a mapping from standard split names to specific files for the standard splits of this data
+splits:
+  train: [train]
+  dev: [dev]
+  test: [test]

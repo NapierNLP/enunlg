@@ -1,0 +1,8 @@
+mr:
+  ignore_order: True
+  set_position: False
+text:
+  delexicalise:
+    mode: split_on_caps # could also be strict
+    slots: [name, near]
+  normalise: tgen
