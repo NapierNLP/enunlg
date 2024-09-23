@@ -1,5 +1,9 @@
 from typing import Iterable, List
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def tgen_lowercase(sentence: Iterable[str]) -> List[str]:
     """

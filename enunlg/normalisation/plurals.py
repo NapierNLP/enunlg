@@ -1,6 +1,10 @@
 from typing import Callable, Optional
 
+import logging
+
 import bidict
+
+logger = logging.getLogger(__name__)
 
 
 class TGenPluraliser(object):
