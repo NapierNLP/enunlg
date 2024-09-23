@@ -1,13 +1,12 @@
 """SCLSTM Cells and RNNs based on https://github.com/pytorch/pytorch/blob/master/benchmarks/fastrnns/custom_lstms.py"""
 
 from collections import namedtuple
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from typing import List, Tuple, TypeVar, TYPE_CHECKING
 
-if TYPE_CHECKING:
-    import enunlg.embeddings
-    import enunlg.embeddings.onehot
-
+import logging
+import os
 import random
+import tarfile
 
 import omegaconf
 import torch
@@ -17,19 +16,26 @@ import torch.nn.functional
 
 import enunlg.embeddings.glove
 
+if TYPE_CHECKING:
+    import enunlg.embeddings
+    import enunlg.embeddings.binary
+    import enunlg.vocabulary
+
+logger = logging.getLogger(__name__)
+
 LSTMState = namedtuple('LSTMState', ['hx', 'cx'])
 SCLSTMState = namedtuple('SCLSTMState', ['hx', 'cx', 'dx'])
 
 
 class JitLSTMCell(torch.jit.ScriptModule):
-    def __init__(self, input_size, hidden_size):
+    def __init__(self, num_input_dims, num_hidden_dims):
         super(JitLSTMCell, self).__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.weight_ih = torch.nn.Parameter(torch.randn(4 * hidden_size, input_size))
-        self.weight_hh = torch.nn.Parameter(torch.randn(4 * hidden_size, hidden_size))
-        self.bias_ih = torch.nn.Parameter(torch.randn(4 * hidden_size))
-        self.bias_hh = torch.nn.Parameter(torch.randn(4 * hidden_size))
+        self.input_size = num_input_dims
+        self.hidden_size = num_hidden_dims
+        self.weight_ih = torch.nn.Parameter(torch.randn(4 * num_hidden_dims, num_input_dims))
+        self.weight_hh = torch.nn.Parameter(torch.randn(4 * num_hidden_dims, num_hidden_dims))
+        self.bias_ih = torch.nn.Parameter(torch.randn(4 * num_hidden_dims))
+        self.bias_hh = torch.nn.Parameter(torch.randn(4 * num_hidden_dims))
 
     @torch.jit.script_method
     def forward(self,
@@ -57,8 +63,8 @@ class JitLSTMLayer(torch.jit.ScriptModule):
         self.cell = cell(*cell_args)
 
     @torch.jit.script_method
-    def forward(self, input: torch.Tensor, state: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        inputs = input.unbind(0)
+    def forward(self, input_tensor: torch.Tensor, state: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        inputs = input_tensor.unbind(0)
         outputs = torch.jit.annotate(List[torch.Tensor], [])
         for i in range(len(inputs)):
             out, state = self.cell(inputs[i], state)
@@ -254,9 +260,9 @@ class SCLSTMLayer(torch.nn.Module):
 
     # @torch.jit.script_method
     def forward(self,
-                input: torch.Tensor,
+                input_tensor: torch.Tensor,
                 state: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-        inputs = input.unbind(0)
+        inputs = input_tensor.unbind(0)
         # outputs = torch.jit.annotate(List[torch.Tensor], [])
         outputs = []
         for i in range(len(inputs)):
@@ -283,16 +289,10 @@ SCLSTM_RELEASED_CONFIG.slot_value_size = 15
 
 class BaseSCLSTMModel(torch.nn.Module):
     def __init__(self,
-                 da_embedder: "enunlg.embeddings.onehot.DialogueActEmbeddings",
-                 token_int_mapper: "enunlg.vocabulary.TokenVocabulary",
+                 input_vocab_size: int,
+                 output_vocab_size: int,
                  model_config=None,
                  sclstm_layer=None):
-        """
-        :param da_embedder:
-        :param token_int_mapper:
-        :param model_config:
-        :param sclstm_layer:
-        """
         super().__init__()
         self.config = model_config
 
@@ -301,17 +301,15 @@ class BaseSCLSTMModel(torch.nn.Module):
         self.one_slot_per_word_xi = 100
 
         # Set basic properties
-        self.input_vocab = da_embedder
-        self.input_vocab_size = da_embedder.dimensionality
-
-        self.output_vocab = token_int_mapper
-        self.output_vocab_size = token_int_mapper.max_index + 1
-        self.output_stop_token = self.output_vocab.stop_token_int
+        self.input_vocab_size = input_vocab_size
+        self.output_vocab_size = output_vocab_size
+        self.output_stop_token = model_config.embeddings.stop_idx
 
         # Initialize networks
         self.token_embeddings = torch.nn.Embedding(self.output_vocab_size, self.config.embeddings.dimensions)
         if sclstm_layer is None:
-            raise ValueError("Cannot initialise an SCLSTMModel without first defining the SCLSTM Layer")
+            message = "Cannot initialise an SCLSTMModel without first defining the SCLSTM Layer"
+            raise ValueError(message)
         self.sclstm_layer = sclstm_layer
         self.output_prediction = torch.nn.Linear(self.config.num_hidden_dims, self.output_vocab_size)
 
@@ -320,6 +318,10 @@ class BaseSCLSTMModel(torch.nn.Module):
         # gradients = T.grad(clip_gradient(self.cost, 1), self.params)
         # Here we might add this instead:
         # torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
+
+    @property
+    def _init_args(self):
+        raise NotImplementedError()
 
     def init_h_c_state(self, batch_size=1):
         return LSTMState(torch.zeros((batch_size, self.config.num_hidden_dims)),
@@ -365,7 +367,6 @@ class BaseSCLSTMModel(torch.nn.Module):
         for da_1, da_2 in zip(da_states, da_states[1:]):
             cost += self.one_slot_per_word_eta * self.one_slot_per_word_xi ** torch.abs(da_1 - da_2)
         return cost
-
     def train_step(self,
                    cued_da_bitvector: torch.Tensor,
                    target_token_indices: torch.Tensor,
@@ -386,10 +387,13 @@ class BaseSCLSTMModel(torch.nn.Module):
                 hcd_states.append(last_hcd_state)
             dec_outputs = torch.stack(dec_outputs).squeeze(1)
         # Squeezing the batch out of outputs
-        loss = criterion(dec_outputs.squeeze(1), target_token_indices[1:]) +\
+        loss = criterion(dec_outputs.squeeze(1), target_token_indices[1:]) + \
                torch.sum(torch.abs(last_hcd_state[-1]))
 
         if hcd_states:
+            # The following raises a "Tensor not callable" error in mypy, even if we refactor to make it inline
+            # as part of the original assignment to loss above.
+            # TODO find out why
             loss += self.one_at_a_time_cost(hcd_states)
         # print(f"{dec_outputs.data.topk(1)=}")
         # print(f"{dec_outputs.size()=}")
@@ -404,46 +408,13 @@ class BaseSCLSTMModel(torch.nn.Module):
     def generate(self, enc_emb, max_length=50):
         return self.generate_greedy(enc_emb, max_length)
 
-    def generate_beam(self, enc_emb, max_length=50, beam_size=10, num_expansions: Optional[int] = None):
-        if num_expansions is None:
-            num_expansions = beam_size
-        with torch.no_grad():
-            enc_outputs, enc_h_c_state = self.encode(enc_emb)
-
-            dec_h_c_state: torch.Tensor = enc_h_c_state
-            prev_beam: List[Tuple[float, Tuple[int, ...], torch.Tensor]] = [(0.0, (1, ), dec_h_c_state)]
-
-            for dec_index in range(max_length - 1):
-                curr_beam = []
-                for prev_beam_prob, prev_beam_item, prev_beam_hidden_state in prev_beam:
-                    prev_item_index = prev_beam_item[-1]
-                    if prev_item_index in (2, 0):
-                        curr_beam.append((prev_beam_prob, prev_beam_item, prev_beam_hidden_state))
-                    else:
-                        dec_input = torch.tensor([[prev_item_index]])
-                        dec_output, dec_h_c_state = self.decoder.forward(dec_input, prev_beam_hidden_state, enc_outputs)
-                        top_values, top_indices = dec_output.data.topk(num_expansions)
-
-                        for prob, candidate in zip(top_values, top_indices):
-                            curr_beam.append((prev_beam_prob + float(prob), prev_beam_item + (int(candidate), ), dec_h_c_state))
-                prev_beam = []
-                prev_beam_set = set()
-                # print(len(curr_beam))
-                for prob, item, hidden in curr_beam:
-                    if (prob, item) not in prev_beam_set:
-                        prev_beam_set.add((prob, item))
-                        prev_beam.append((prob, item, hidden))
-                # print(len(prev_beam))
-                prev_beam = sorted(prev_beam, key=lambda x: x[0] / len(x[1]), reverse=True)[:beam_size]
-                # print(len(prev_beam))
-            return [(prob / len(seq), seq) for prob, seq, _ in prev_beam]
-
     def generate_greedy(self, cued_da_bitvector: torch.Tensor, max_length=50):
         # print(f"Inside {self.__class__}.generate_greedy()")
         with torch.no_grad():
             # Start with the <go> token
             prev_token = torch.tensor([1])
             # Include the start token in the output
+            # TODO: switch to a tensor of zeros up to max_length long and fill it in (append is expensive)
             dec_outputs = [1]
             # Initialize the hidden state
             initial_hidden = self.init_h_c_state()
@@ -481,58 +452,102 @@ class BaseSCLSTMModel(torch.nn.Module):
     def output_rep_to_string(self, output_token_indices) -> str:
         return self.output_vocab.pretty_string(output_token_indices)
 
+    def _save_classname_to_dir(self, directory_path):
+        with open(os.path.join(directory_path, "__class__.__name__"), 'w') as class_file:
+            class_file.write(self.__class__.__name__)
+
+    def save(self, filepath, tgz=True):
+        os.mkdir(filepath)
+        self._save_classname_to_dir(filepath)
+        with open(f"{filepath}/_state_dict.pt", 'wb') as state_file:
+            torch.save(self.state_dict(), state_file)
+        with open(f"{filepath}/model_config.yaml", 'w') as config_file:
+            omegaconf.OmegaConf.save(self.config, config_file)
+        with open(f"{filepath}/_init_args.yaml", 'w') as init_args_file:
+            omegaconf.OmegaConf.save(self._init_args,
+                                     init_args_file)
+        if tgz:
+            with tarfile.open(f"{filepath}.tgz", mode="x:gz") as out_file:
+                out_file.add(filepath, arcname=os.path.basename(filepath))
+
 
 class SCLSTMModelAsDescribed(BaseSCLSTMModel):
-    def __init__(self, da_embedder: "enunlg.embeddings.onehot.DialogueActEmbeddings",
-                 token_int_mapper: "enunlg.vocabulary.TokenVocabulary", model_config=None):
+    def __init__(self, input_vocab_size, output_vocab_size, model_config=None):
         if model_config is None:
             # Set defaults
             model_config = SCLSTM_DESCRIBED_CONFIG
         sclstm_layer = SCLSTMLayer(SCLSTMCellPaper, model_config.mr_size, model_config.embeddings.dimensions,
                                    model_config.num_hidden_dims)
-        super().__init__(da_embedder, token_int_mapper, model_config, sclstm_layer)
+        super().__init__(input_vocab_size, output_vocab_size, model_config, sclstm_layer)
         torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
+
+    @property
+    def _init_args(self):
+        return {"input_vocab_size": self.input_vocab_size,
+                "output_vocab_size": self.output_vocab_size}
 
 
 class SCLSTMModelAsReleased(BaseSCLSTMModel):
-    def __init__(self, da_embedder: "enunlg.embeddings.onehot.DialogueActEmbeddings",
-                 token_int_mapper: "enunlg.vocabulary.TokenVocabulary", model_config=None):
+    def __init__(self, input_vocab_size, output_vocab_size, model_config=None):
         if model_config is None:
             # Set defaults
             model_config = SCLSTM_RELEASED_CONFIG
         sclstm_layer = SCLSTMLayer(SCLSTMCellReleased, model_config.act_size, model_config.slot_value_size,
                                    model_config.embeddings.dimensions,
                                    model_config.num_hidden_dims)
-        super().__init__(da_embedder, token_int_mapper, model_config, sclstm_layer)
+        super().__init__(input_vocab_size, output_vocab_size, model_config, sclstm_layer)
         torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
+
+    @property
+    def _init_args(self):
+        return {"input_vocab_size": self.input_vocab_size,
+                "output_vocab_size": self.output_vocab_size}
 
 
 class SCLSTMModelAsDescribedWithGlove(SCLSTMModelAsDescribed):
-    def __init__(self, da_embedder: "enunlg.embeddings.onehot.DialogueActEmbeddings",
+    def __init__(self, input_vocab_size,
                  glove_filepath: str, model_config=None):
         token_int_mapper, embedding_layer = enunlg.embeddings.glove.GloVeEmbeddings.from_word_embedding_txt(
             glove_filepath, with_vocab=True)
+        self.glove_filepath = glove_filepath
         if model_config is None:
             model_config = SCLSTM_DESCRIBED_CONFIG
         model_config.embeddings.mode = 'glove'
-        super().__init__(da_embedder, token_int_mapper, model_config=model_config)
+        super().__init__(input_vocab_size, token_int_mapper.size, model_config=model_config)
         self.token_embeddings = embedding_layer
         self.token_embeddings.requires_grad_(model_config.embeddings.backprop)
         torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
+
+    @property
+    def _init_args(self):
+        # TODO rewrite these classes to handle embeddings differently so we don't need the filename here
+        return {"input_vocab_size": self.input_vocab_size,
+                "glove_filepath": self.glove_filepath}
 
 
 class SCLSTMModelAsReleasedWithGlove(SCLSTMModelAsReleased):
-    def __init__(self, da_embedder: "enunlg.embeddings.onehot.DialogueActEmbeddings",
+    def __init__(self, input_vocab_size,
                  glove_filepath: str, model_config=None):
         token_int_mapper, embedding_layer = enunlg.embeddings.glove.GloVeEmbeddings.from_word_embedding_txt(
             glove_filepath, with_vocab=True)
+        self.glove_filepath = glove_filepath
         if model_config is None:
             model_config = SCLSTM_RELEASED_CONFIG
         model_config.embeddings.mode = 'glove'
-        super().__init__(da_embedder, token_int_mapper, model_config=model_config)
+        super().__init__(input_vocab_size, token_int_mapper.size, model_config=model_config)
+        self.output_vocab = token_int_mapper
         self.token_embeddings = embedding_layer
         self.token_embeddings.requires_grad_(model_config.embeddings.backprop)
         torch.nn.utils.clip_grad_value_(self.parameters(), 1.0)
+
+    @property
+    def _init_args(self):
+        # TODO rewrite these classes to handle embeddings differently so we don't need the filename here
+        return {"input_vocab_size": self.input_vocab_size,
+                "glove_filepath": self.glove_filepath}
+
+
+SCLSTMModel = TypeVar("SCLSTMModel", bound=BaseSCLSTMModel)
 
 
 def test_script_lstm_layer(seq_len, batch, input_size, hidden_size):
