@@ -1,10 +1,13 @@
 """Lookup templates use MRs as keys and texts as values."""
 
 from collections import defaultdict
-from typing import Any, Hashable, Iterable, Tuple
+from typing import Any, Dict, Hashable, Iterable, List, Tuple
 
 import abc
+import logging
 import random
+
+logger = logging.getLogger(__name__)
 
 
 class LookupGenerator(abc.ABC):
@@ -29,7 +32,7 @@ class OneToOneLookupGenerator(LookupGenerator):
         NB: There is no method for choosing which template gets stored for a given MR;
         any time a new (MR, Text) pair is seen in training, it replaces the previous Text for that MR.
         """
-        self._mapping = {}
+        self._mapping: Dict[Hashable, Any] = {}
 
     def _add_io_pair(self, io_pair: Tuple[Hashable, Any]) -> None:
         self._mapping[io_pair[0]] = io_pair[1]
@@ -50,7 +53,7 @@ class OneToManyLookupGenerator(LookupGenerator):
         NB: Templates are chosen randomly at prediction time. Since template texts are stored in a list,
         the random choice at prediction time will be weighted by how frequently each text was seen during training.
         """
-        self._mapping = defaultdict(list)
+        self._mapping: Dict[Hashable, List] = defaultdict(list)
 
     def _add_io_pair(self, io_pair: Tuple[Hashable, Any]) -> None:
         self._mapping[io_pair[0]].append(io_pair[1])

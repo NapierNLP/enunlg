@@ -1,0 +1,12 @@
+defaults:
+  - data/corpus: enriched-e2e
+  - _self_
+random_seed: 42
+pytorch:
+  device: cpu
+data:
+  input_mode: e2e
+
+test:
+  classifier_file: models/e2e.semclassifier.nlg.tgz
+  corpus_file: outputs/2024-05-28/23-19-44/evaluation-output.corpus

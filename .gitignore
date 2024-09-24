@@ -1,3 +1,5 @@
 __pycache__/
+outputs/
 .idea/
 datasets/
+.Rproj.user

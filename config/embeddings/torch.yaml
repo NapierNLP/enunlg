@@ -1,0 +1,12 @@
+type: 'torch'
+num_embeddings: null
+embedding_dim: 50
+padding_idx: null
+max_norm: null
+norm_type: 2.0
+scale_grad_by_freq: False
+sparse: False
+_weight: null
+_freeze: False
+device: null
+dtype: null

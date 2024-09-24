@@ -1,0 +1,8 @@
+type: 'glove'
+vectors_file: null
+freeze: True
+padding_idx: null
+max_norm: null
+norm_type: 2.0
+scale_grad_by_freq: False
+sparse: False

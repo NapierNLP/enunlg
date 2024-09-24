@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Iterable
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class IOPair:
@@ -16,17 +20,26 @@ class IOPair:
 
 
 class Corpus(list):
-    def __init__(self, seq: Iterable) -> None:
+    def __init__(self, seq: Optional[Iterable]) -> None:
         """
         A corpus is a list of items with associated metadata
         """
+        if seq is None:
+            seq = []
         super().__init__(seq)
 
         self.metadata: Optional[Dict[str, Any]] = None
 
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            retval = self.__class__(super().__getitem__(key))
+            retval.metadata = self.metadata
+            return retval
+        return super().__getitem__(key)
+
 
 class IOCorpus(Corpus):
-    def __init__(self, seq: Iterable) -> None:
+    def __init__(self, seq: Optional[Iterable]) -> None:
         """
         An IOCorpus is a corpus of input-output pairs.
         :param seq:

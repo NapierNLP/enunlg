@@ -23,14 +23,18 @@ model:
     file: datasets/glove-vectors/rnnlg.vectors-80.txt
     dimensions: 80
     backprop: True
+    padding_idx: 0
+    start_idx: 1
+    stop_idx: 2
   num_hidden_dims: 80
 
-mode:
-  train:
-    num_epochs: 20
-    record_interval: 519
-    shuffle: True
-    batch_size: 1
-    optimizer: sgd
-    learning_rate: 0.1
-    learning_rate_decay: 0.5
+mode: train
+
+train:
+  num_epochs: 20
+  record_interval: 519
+  shuffle: True
+  batch_size: 1
+  optimizer: sgd
+  learning_rate: 0.1
+  learning_rate_decay: 0.5

@@ -1,28 +1,31 @@
+from pathlib import Path
+from typing import TYPE_CHECKING
+
 import logging
-import random
-import time
-
-from typing import List, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import enunlg.embeddings.onehot
+import tarfile
+import tempfile
 
 import omegaconf
 import torch
 import torch.nn
 
-import enunlg.encdec.seq2seq as s2s
+import enunlg.encdec.tgen
+
+if TYPE_CHECKING:
+    import enunlg.embeddings.binary
+    import enunlg.vocabulary
+
+logger = logging.getLogger(__name__)
 
 
 class TGenSemClassifier(torch.nn.Module):
-    def __init__(self, text_vocabulary: "enunlg.vocabulary.TokenVocabulary",
-                 onehot_encoder: "enunlg.embeddings.onehot.DialogueActEmbeddings",
+    def __init__(self, text_vocab_size: int,
+                 bitvector_encoder_dims: int,
                  model_config=None) -> None:
         super().__init__()
         if model_config is None:
             # Set defaults
             model_config = omegaconf.DictConfig({'name': 'tgen_classifier',
-                                    'max_mr_length': 30,
                                     'text_encoder':
                                         {'embeddings':
                                             {'mode': 'random',
@@ -34,17 +37,12 @@ class TGenSemClassifier(torch.nn.Module):
                                     })
         self.config = model_config
 
-        self.text_vocabulary = text_vocabulary
-        self.onehot_encoder = onehot_encoder
+        self.text_vocab_size = text_vocab_size
+        self.bitvector_encoder_dims = bitvector_encoder_dims
 
-        self.text_encoder = s2s.TGenEnc(self.text_vocabulary.max_index + 1, self.num_hidden_dims, self.config.text_encoder.embeddings.dimensions)
-        self.classif_linear = torch.nn.Linear(self.num_hidden_dims, self.onehot_encoder.dimensionality)
+        self.text_encoder = enunlg.encdec.tgen.TGenEnc(self.text_vocab_size, self.num_hidden_dims)
+        self.classif_linear = torch.nn.Linear(self.num_hidden_dims, self.bitvector_encoder_dims)
         self.classif_sigmoid = torch.nn.Sigmoid()
-
-        # Initialise optimisers (same as in TGenEncDec model)
-        self.learning_rate = 0.0005
-        self.optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        self.scheduler = torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=0.5)
 
     @property
     def num_hidden_dims(self):
@@ -57,64 +55,60 @@ class TGenSemClassifier(torch.nn.Module):
         output = self.classif_sigmoid(output)
         return output
 
-    def train_step(self, text_ints, mr_onehot):
-        criterion = torch.nn.CrossEntropyLoss()
-        self.optimizer.zero_grad()
+    def train_step(self, text_ints, mr_onehot, optimizer, criterion):
+        optimizer.zero_grad()
 
-        loss = 0.0
         output = self.forward(text_ints)
-        loss += criterion(output.squeeze(0).squeeze(0), mr_onehot)
+        logger.debug(f"{mr_onehot.size()=}")
+        logger.debug(f"{output.size()=}")
+        loss = criterion(output, mr_onehot)
 
         loss.backward()
-        self.optimizer.step()
+        optimizer.step()
         return loss.item()
-
-    def train_iterations(self, pairs, epochs: int, record_interval: int = 1000) -> List[float]:
-        """
-        Run `epochs` training epochs over all training pairs, shuffling pairs in place each epoch.
-
-        :param pairs: input and output indices for embeddings
-        :param epochs: number of training epochs to run
-        :param record_interval: how frequently to print and record training loss
-        :return: list of average loss for each `record_interval` for each epoch
-        """
-        # In TGen this would begin with a call to self._init_training()
-
-        start_time = time.time()
-        prev_chunk_start_time = start_time
-        loss_this_chunk = 0
-        loss_to_plot = []
-
-        for epoch in range(epochs):
-            logging.info(f"Beginning epoch {epoch}...")
-            logging.info(f"Learning rate is now {self.learning_rate}")
-            random.shuffle(pairs)
-            for index, (text_ints, mr_onehot) in enumerate(pairs, start=1):
-                loss = self.train_step(text_ints, mr_onehot)
-                loss_this_chunk += loss
-                if index % record_interval == 0:
-                    avg_loss = loss_this_chunk / record_interval
-                    loss_this_chunk = 0
-                    logging.info("------------------------------------")
-                    logging.info(f"{index} iteration loss = {avg_loss}")
-                    logging.info(f"Time this chunk: {time.time() - prev_chunk_start_time}")
-                    prev_chunk_start_time = time.time()
-                    loss_to_plot.append(avg_loss)
-                    for i, o in pairs[:10]:
-                        logging.info("An example!")
-                        logging.info(f"Text:   {' '.join([x for x in self.text_vocabulary.get_tokens(i.tolist(), as_string=False) if x != '<VOID>'])}")
-                        logging.info(f"MR:     {self.onehot_encoder.embedding_to_string(o.tolist())}")
-                        prediction = self.predict(i).squeeze(0).squeeze(0).tolist()
-                        output_list = [1.0 if x > 0.95 else 0.0 for x in prediction]
-                        logging.info(f"Output: {self.onehot_encoder.embedding_to_string(output_list)}")
-                        logging.info(f"One-hot target: {o.tolist()}")
-                        logging.info(f"Current output: {prediction}")
-            self.scheduler.step()
-            logging.info("============================================")
-        logging.info("----------")
-        logging.info(f"Training took {(time.time() - start_time) / 60} minutes")
-        return loss_to_plot
 
     def predict(self, text_ints):
         with torch.no_grad():
             return self.forward(text_ints)
+
+    def _save_classname_to_dir(self, directory_path):
+        with (Path(directory_path) / "__class__.__name__").open('w') as class_file:
+            class_file.write(self.__class__.__name__)
+
+    def save(self, filepath, tgz=True):
+        Path(filepath).mkdir()
+        self._save_classname_to_dir(filepath)
+        with (Path(filepath) / "_state_dict.pt").open('wb') as state_file:
+            torch.save(self.state_dict(), state_file)
+        with (Path(filepath) / "model_config.yaml").open('w') as config_file:
+            omegaconf.OmegaConf.save(self.config, config_file)
+        with (Path(filepath) / "_init_args.yaml").open('w') as init_args_file:
+            omegaconf.OmegaConf.save({'text_vocab_size': self.text_vocab_size,
+                                      'bitvector_encoder_dims': self.bitvector_encoder_dims},
+                                     init_args_file)
+        if tgz:
+            with tarfile.open(f"{filepath}.tgz", mode="x:gz") as out_file:
+                out_file.add(filepath, arcname=Path(filepath).parent)
+
+
+    @classmethod
+    def load(cls, filepath):
+        if tarfile.is_tarfile(filepath):
+            with tarfile.open(filepath, 'r') as classifier_file:
+                tmp_dir = tempfile.mkdtemp()
+                tarfile_member_names = classifier_file.getmembers()
+                classifier_file.extractall(tmp_dir)
+                root_name = tarfile_member_names[0].name
+                return cls.load_from_dir(Path(tmp_dir) / root_name)
+
+    @classmethod
+    def load_from_dir(cls, filepath):
+        with (Path(filepath) / "__class__.__name__").open('r') as class_name_file:
+            class_name = class_name_file.read().strip()
+            assert class_name == cls.__name__
+        init_args = omegaconf.OmegaConf.load(Path(filepath) / '_init_args.yaml')
+        model_config = omegaconf.OmegaConf.load(Path(filepath) / 'model_config.yaml')
+        model = cls(init_args.text_vocab_size, init_args.bitvector_encoder_dims, model_config)
+        state_dict = torch.load(Path(filepath) / '_state_dict.pt')
+        model.load_state_dict(state_dict)
+        return model

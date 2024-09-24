@@ -1,0 +1,7 @@
+defaults:
+  - corpus: enriched-webnlg
+  - _self_
+
+input_mode: e2e
+preprocessing:
+  delexicalise: True

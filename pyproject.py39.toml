@@ -1,0 +1,99 @@
+[tool.poetry]
+name = "enunlg"
+version = "0.3.0"
+description = ""
+authors = ["David M. Howcroft <dave.howcroft@gmail.com>"]
+license = "Apache 2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "~3.9"
+torch = "1.9.1"
+conda-lock = "^2.5.6"
+regex = "^2023.12.25"
+numpy = "^1.26.4"
+bidict = "^0.23.1"
+python-box = "^7.1.1"
+jupyter = "^1.0.0"
+ipython = "~7"
+ipymd = "^0.1.3"
+nbstripout = "^0.7.1"
+hydra-core = "^1.3.2"
+prettytable = "^3.10.0"
+future = "^1.0.0"
+sacrebleu = "^2.4.1"
+lxml = "^5.1.0"
+xsdata = {extras = ["lxml"], version = "^24.3.1"}
+tensorboard = "2.15.1"
+setuptools = "59.5.0"
+submitit = "^1.5.1"
+hydra-submitit-launcher = "^1.2.0"
+sparqlwrapper = "^2.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.6.1"
+pytest = "^5.2"
+scalene = "^1.5.13"
+types-regex = "^2023.10.3.0"
+types-lxml = "^2023.10.21"
+stanza = "^1.7.0"
+ruff = "^0.3.4"
+
+
+[tool.ruff]
+exclude = [
+    ".git",
+]
+
+line-length = 120
+indent-width = 4
+
+# Assume Python 3.9
+target-version = "py39"
+
+[tool.ruff.lint]
+# Enable Pyflakes (`F`), the pycodestyle (`E`), and flake8-pathlib (`PTH`)  codes by default.
+select = [
+    "A",  # Shadowing builtins
+    "B",  # Check for 'bugbears'
+    "C",  # Use comprehensions comprehensively
+#    "COM", # Check for weirdness with commas
+#    "D",  # Check for docstrings & their styles
+    "E",
+    "EM",  # Check our error messages provide more useful tracebacks
+    "F",
+#    "FBT",  # Checks for the 'boolean trap' where a bool in a function call changes behavior
+    "FURB",  # Tips for modernizing Python
+    "ICN",  # Try to stick to common conventions when using aliases with imports, etc
+#    "INP", # Implicit Namespace Package -- add __init__.py
+#    "N",  # PEP 8 naming conventions
+    "PERF",  # Performance tips linter (in preview)
+    "PIE",  # Odds and ends
+#    "PTH",
+    "R",  # PyLint suggestions for refactoring
+    "RET",  # Use return statements sensibly
+#    "RUF",  # ruff-specific checks -- currently mostly flags confusable unicode chars which are as intended
+    "SIM",  # Tips for simplifying code
+]
+ignore = ["E501"]
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+# Like Black, use double quotes for strings.
+quote-style = "double"
+
+# Like Black, indent with spaces, rather than tabs.
+indent-style = "space"
+
+# Like Black, respect magic trailing commas.
+skip-magic-trailing-comma = false
+
+# Like Black, automatically detect the appropriate line ending.
+line-ending = "auto"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

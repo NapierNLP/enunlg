@@ -1,6 +1,16 @@
-from typing import Dict, Iterable, List, Union
+from typing import Dict, Iterable, List, TYPE_CHECKING
+
+import os
+import logging
+import tarfile
 
 import bidict
+import omegaconf
+
+logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from enunlg.data_management.webnlg import RDFTriple
 
 
 class IntegralRDFVocabulary(object):
@@ -51,7 +61,7 @@ class IntegralRDFVocabulary(object):
             self._max_index += 1
             self._arg_dict[argument] = self._max_index
 
-    def get_ints(self, rdf: Iterable[object]) -> List[int]:
+    def get_ints(self, rdf: "Iterable[RDFTriple]") -> List[int]:
         """
         Embed `rdf` based on the mappings built from `self.dataset`.
 
@@ -69,7 +79,7 @@ class IntegralRDFVocabulary(object):
             embedding.append(self._arg_dict[triple.object])
         return embedding
 
-    def get_ints_with_padding(self, rdf: Iterable[object], max_da_length: int = 10):
+    def get_ints_with_padding(self, rdf: "Iterable[RDFTriple]", max_da_length: int = 10):
         embedding = self.get_ints(rdf)
         if len(embedding) > max_da_length * 3:
             # Truncate
@@ -79,15 +89,15 @@ class IntegralRDFVocabulary(object):
             padding = [self._predicate_dict['PRED_UNK'], self._arg_dict['ARG_UNK'], self._arg_dict['ARG_UNK']] * int((max_da_length * 3 - len(embedding)) / 3)
             return padding + embedding
 
-    def get_tokens(self, rdf_integers: Iterable[int], drop_filler=True):
+    def get_tokens(self, rdf_integers: Iterable[int], drop_filler=True) -> List[str]:
         output = []
         for index, integer in enumerate(rdf_integers):
             if drop_filler and integer in (0, 1):
                 continue
             if index % 3 == 0:
-                output.append(self._predicate_dict.inv[integer])
+                output.append(self._predicate_dict.inverse[integer])
             else:
-                output.append(self._arg_dict.inv[integer])
+                output.append(self._arg_dict.inverse[integer])
         return output
 
     def pretty_string(self, rdf_integers: Iterable[int], drop_filler=True) -> str:
@@ -95,6 +105,8 @@ class IntegralRDFVocabulary(object):
 
 
 class IntegralDialogueActVocabulary(object):
+    STATE_ATTRIBUTES = ("_act_dict", "_slot_dict", "_value_dict", "_filler", "_max_index")
+
     def __init__(self, dataset: Iterable[Dict[str, str]]) -> None:
         """
         Embeddings for a set of dialogue acts such that each token receives a different integral value for each position it appears in.
@@ -129,6 +141,43 @@ class IntegralDialogueActVocabulary(object):
         #       this class doesn't mess things up for subclasses after we implement it.
         raise NotImplementedError()
 
+    def _save_classname_to_dir(self, directory_path):
+        with open(os.path.join(directory_path, "__class__.__name__"), 'w') as class_file:
+            class_file.write(self.__class__.__name__)
+
+    def save(self, filepath, tgz=False):
+        os.mkdir(filepath)
+        self._save_classname_to_dir(filepath)
+        state = {}
+        for attribute in self.STATE_ATTRIBUTES:
+            curr_obj = getattr(self, attribute)
+            if attribute in ("_act_dict", "_slot_dict", "_value_dict"):
+                state[attribute] = dict(curr_obj)
+            elif attribute == "_filler":
+                state[attribute] = tuple(curr_obj)
+            else:
+                state[attribute] = curr_obj
+        with open(os.path.join(filepath, "_save_state.yaml"), 'w') as state_file:
+            state = omegaconf.OmegaConf.create(state)
+            omegaconf.OmegaConf.save(state, state_file)
+        if tgz:
+            with tarfile.open(f"{filepath}.tgz", mode="x:gz") as out_file:
+                out_file.add(filepath, arcname=os.path.basename(filepath))
+
+    @classmethod
+    def load_from_dir(cls, filepath):
+        with open(os.path.join(filepath, '__class__.__name__'), 'r') as class_file:
+            assert class_file.read().strip() == cls.__name__
+            new_instance = cls([])
+            state = omegaconf.OmegaConf.load(os.path.join(filepath, "_save_state.yaml"))
+            for attribute in state:
+                setattr(new_instance, attribute, state[attribute])
+            new_instance._act_dict = bidict.OrderedBidict(new_instance._act_dict)
+            new_instance._slot_dict = bidict.OrderedBidict(new_instance._slot_dict)
+            new_instance._value_dict = bidict.OrderedBidict(new_instance._value_dict)
+            new_instance._filler = set(new_instance._filler)
+            return new_instance
+
 
 class IntegralInformVocabulary(IntegralDialogueActVocabulary):
     def __init__(self, dataset: Iterable[Dict[str, str]], multivalued_slots=False) -> None:
@@ -148,7 +197,11 @@ class IntegralInformVocabulary(IntegralDialogueActVocabulary):
         self._act_dict['inform'] = self._max_index
         self._init_vocabulary(dataset, multivalued_slots)
 
-    def _init_vocabulary(self, dataset, multivalued_slots: bool) -> int:
+    @property
+    def size(self):
+        return self._max_index + 1
+
+    def _init_vocabulary(self, dataset, multivalued_slots: bool) -> None:
         """
         Scan `self.dataset` and set up dicts to make it possible to generate embeddings.
         :return: the size of the vocabulary (i.e. the max index value associated with a dialogue act, slot, or value)
@@ -161,7 +214,6 @@ class IntegralInformVocabulary(IntegralDialogueActVocabulary):
                         self._add_value_if_new(value)
                 else:
                     self._add_value_if_new(mr[slot])
-        return self._max_index
 
     def _add_slot_if_new(self, slot: str) -> None:
         if slot not in self._slot_dict:
@@ -208,11 +260,11 @@ class IntegralInformVocabulary(IntegralDialogueActVocabulary):
             if drop_filler and integer in (0, 1, 2):
                 continue
             if index % 3 == 0:
-                output.append(self._act_dict.inv[integer])
+                output.append(self._act_dict.inverse[integer])
             if index % 3 == 1:
-                output.append(self._slot_dict.inv[integer])
+                output.append(self._slot_dict.inverse[integer])
             if index % 3 == 2:
-                output.append(self._value_dict.inv[integer])
+                output.append(self._value_dict.inverse[integer])
         return output
 
     def pretty_string(self, da_integers: Iterable[int], drop_filler=True) -> str:
@@ -220,6 +272,8 @@ class IntegralInformVocabulary(IntegralDialogueActVocabulary):
 
 
 class TokenVocabulary(object):
+    STATE_ATTRIBUTES = ("_token2int", "_filler", "_max_index")
+
     def __init__(self, dataset: Iterable[Iterable[str]]) -> None:
         """
 
@@ -235,21 +289,86 @@ class TokenVocabulary(object):
             '<UNK>': 3,
             '<-s>': 4
         })
-        self._max_index = 4
         self._filler = {0}
+        self._max_index = 4
         self._init_vocabulary()
 
-    @property
-    def tokens(self):
-        return list(self._token2int.keys())
+    def _save_classname_to_dir(self, directory_path):
+        with open(os.path.join(directory_path, "__class__.__name__"), 'w') as class_file:
+            class_file.write(self.__class__.__name__)
+
+    def save(self, filepath, tgz=False):
+        os.mkdir(filepath)
+        self._save_classname_to_dir(filepath)
+        state = {}
+        for attribute in self.STATE_ATTRIBUTES:
+            curr_obj = getattr(self, attribute)
+            if attribute == "_token2int":
+                state[attribute] = dict(curr_obj)
+            elif attribute == "_filler":
+                state[attribute] = tuple(curr_obj)
+            else:
+                state[attribute] = curr_obj
+        with open(os.path.join(filepath, "_save_state.yaml"), 'w') as state_file:
+            state = omegaconf.OmegaConf.create(state)
+            omegaconf.OmegaConf.save(state, state_file)
+        if tgz:
+            with tarfile.open(f"{filepath}.tgz", mode="x:gz") as out_file:
+                out_file.add(filepath, arcname=os.path.basename(filepath))
+
+    @classmethod
+    def load_from_dir(cls, filepath):
+        with open(os.path.join(filepath, '__class__.__name__'), 'r') as class_file:
+            assert class_file.read().strip() == cls.__name__
+            new_instance = cls([])
+            state = omegaconf.OmegaConf.load(os.path.join(filepath, "_save_state.yaml"))
+            for attribute in state:
+                setattr(new_instance, attribute, state[attribute])
+            new_instance._token2int = bidict.OrderedBidict(new_instance._token2int)
+            new_instance._filler = set(new_instance._filler)
+            return new_instance
+
+    def __dir__(self):
+        return self.STATE_ATTRIBUTES
+
+    def __getstate__(self):
+        state = {attribute: self.__getattribute__(attribute)
+                 for attribute in self.STATE_ATTRIBUTES}
+        state['__class__'] = self.__class__.__name__
+        return state
+
+    @classmethod
+    def __setstate__(cls, state):
+        class_name = state["__class__"]
+        assert class_name == cls.__name__
+        new_generator = cls.__new__(cls)
+        for attribute in cls.STATE_ATTRIBUTES:
+            new_generator.__setattr__(attribute, state[attribute])
+        return new_generator
 
     @property
     def filler(self):
         return self._filler
 
     @property
+    def tokens(self):
+        return list(self._token2int.keys())
+
+    @property
     def max_index(self):
         return self._max_index
+
+    @property
+    def size(self):
+        return self._max_index + 1
+
+    @property
+    def padding_token_int(self):
+        return self._token2int['<VOID>']
+
+    @property
+    def start_token_int(self):
+        return self._token2int['<GO>']
 
     @property
     def stop_token_int(self):
@@ -289,11 +408,7 @@ class TokenVocabulary(object):
         :param sentence: representation of a sentence as a sequence of TaggedToken tuples
         :return: a representation of the input sentence as a sequence of integers
         """
-        embedding = [self._token2int['<GO>']]
-        for token in sentence:
-            embedding.append(self.get_int(token))
-        embedding.append(self._token2int['<STOP>'])
-        return embedding
+        return [self._token2int['<GO>']] + [self.get_int(token) for token in sentence] + [self._token2int['<STOP>']]
 
     def get_ints_with_right_padding(self, sentence: Iterable[str], max_sentence_length: int = 50):
         """chore: add newline to end of file
@@ -332,14 +447,16 @@ class TokenVocabulary(object):
             return embedding
 
     def get_token(self, token_integer: int) -> str:
-        return self._token2int.inv[token_integer]
+        return self._token2int.inverse[token_integer]
 
     def get_tokens(self, token_integers: Iterable[int], drop_filler=True) -> List[str]:
         """
-        Map a sequence of integers to a sequence
+        Map a sequence of integers to a sequence of tokens
         """
         output = []
         for integer in token_integers:
+            # cast to int to make sure it's not a torch tensor
+            integer = int(integer)
             if drop_filler and integer in self.filler:
                 continue
             output.append(self.get_token(integer))

@@ -8,7 +8,11 @@ import box
 import omegaconf
 import regex
 
+from enunlg.meaning_representation.slot_value import SlotValueMR
+
 import enunlg.data_management.iocorpus as iocorpus
+
+logger = logging.getLogger(__name__)
 
 # TODO add hydra configuration for e2e challenge stuff!
 E2E_DIR = os.path.join(os.path.dirname(__file__), '../../datasets/e2e-dataset/')
@@ -32,14 +36,16 @@ MR_VALUE_CHARS = r"[A-Za-z0-9_\-,$£ é]+"
 
 
 class E2EPair(iocorpus.IOPair):
-    mr: box.Box
+    mr: SlotValueMR
 
     def sort_mr(self, in_place: bool = True) -> Optional[dict]:
-        sorted_mr = box.Box({key: self.mr[key] for key, _ in sorted(self.mr.items())})
+        sorted_mr = SlotValueMR({key: self.mr[key] for key, _ in sorted(self.mr.items())})
         if in_place:
             self.mr = sorted_mr
         else:
             return sorted_mr
+        # Added for PEP8 consistency and mypy happiness
+        return None
 
 
 class E2ECorpus(iocorpus.IOCorpus):
@@ -50,8 +56,28 @@ class E2ECorpus(iocorpus.IOCorpus):
         for x in self:
             x.sort_mr()
 
+    def print_summary_stats(self):
+        print(f"{self.metadata=}")
+        print(f"num entries: {len(self)}")
+        mr_lengths = []
+        mr_types = set()
+        text_lengths = []
+        text_types = set()
+        for item in self:
+            mr_lengths.append(len(item.mr))
+            mr_types.add(item.mr)
+            text_lengths.append(len(item.text.split()))
+            text_types.add(tuple(item.text.split()))
 
-def parse_mr(e2e_mr: str) -> box.Box:
+        print(f"MRs:\t\t{sum(mr_lengths)/len(mr_lengths):.2f} [{min(mr_lengths)},{max(mr_lengths)}]")
+        print(f"    with {len(mr_types)} types across {len(mr_lengths)} tokens.")
+        print("NB: these values don't tokenize MRs")
+
+        print(f"Texts:\t\t{sum(text_lengths)/len(text_lengths):.2f} [{min(text_lengths)},{max(text_lengths)}]")
+        print(f"    with {len(text_types)} types across {len(text_lengths)} tokens.")
+
+
+def parse_mr(e2e_mr: str) -> SlotValueMR:
     facts = {}
     loop_check = 0
     while e2e_mr:
@@ -64,7 +90,7 @@ def parse_mr(e2e_mr: str) -> box.Box:
             facts[mo.group(1)] = mo.group(2)
             e2e_mr = regex.sub(MR_DELIM_CHARS, '', e2e_mr[mo.span(0)[1]:])
         loop_check += 1
-    return box.Box(facts, frozen_box=True)
+    return SlotValueMR(facts)
 
 
 def delexicalise_exact_matches(pair: E2EPair, fields_to_delex: Optional[Iterable] = None) -> E2EPair:
@@ -77,53 +103,38 @@ def delexicalise_exact_matches(pair: E2EPair, fields_to_delex: Optional[Iterable
             if field in new_mr:
                 field_with_spaces = "".join([(" "+i if i.isupper() else i) for i in new_mr[field]]).strip()
                 if new_mr[field] in new_text:
-                    replacement = f"X-{field}"
+                    replacement = f"__{field.upper()}__"
                     new_text = regex.sub(new_mr[field], replacement, new_text)
                     new_mr[field] = replacement
                 elif field_with_spaces in new_text:
-                    replacement = f"X-{field}"
+                    replacement = f"__{field.upper()}__"
                     new_text = regex.sub(field_with_spaces, replacement, new_text)
                     new_mr[field] = replacement
-        return E2EPair(box.Box(new_mr, frozen_box=True), new_text)
+        return E2EPair(SlotValueMR(new_mr), new_text)
 
 
 def load_e2e_csv(filepath: str) -> List[Tuple[str, str]]:
     """E2E CSV files' first column is MRs and the second column is texts. There is always a header line."""
     with open(filepath, 'r') as in_file:
         csv_reader = csv.reader(in_file)
-        header = next(csv_reader)
+        next(csv_reader)
         return E2ECorpus([E2EPair(parse_mr(pair[0]), pair[1]) for pair in csv_reader])
 
 
-def load_e2e(splits: Optional[Iterable[str]] = None,
-             original: bool = True,
-             e2e_config: Optional[omegaconf.DictConfig] = None) -> E2ECorpus:
+def load_e2e(corpus_config: omegaconf.DictConfig,
+             splits: Optional[Iterable[str]]) -> E2ECorpus:
     """
-
-    :param splits: which splits to load
-    :param original: True to load the original e2e corpus, false to load the cleaned version
-    :param e2e_config: a box.Box or omegaconf.DictConfig like object containing the basic
-                       information about the e2e corpus to be used
     :return: the corpus of MR-text pairs with metadata
     """
-    if e2e_config is None:
-        e2e_config = E2E_CONFIG
-    if original:
-        corpus_name = "E2E Challenge Corpus"
-        default_splits = E2E_SPLITS
-        directory = e2e_config.E2E_DIR
-    else:
-        corpus_name = "E2E Cleaned"
-        default_splits = E2E_CLEANED_SPLITS
-        directory = e2e_config.E2E_CLEANED_DIR
-    if splits is None:
-        splits = default_splits
-    elif not set(splits).issubset(default_splits):
-        raise ValueError(f"`splits` can only contain a subset of {default_splits}. Found {splits}.")
+    default_splits = set(corpus_config.splits.keys())
+    if not set(splits).issubset(default_splits):
+        message = f"`splits` can only contain a subset of {default_splits}. Found {splits}."
+        raise ValueError(message)
     corpus = E2ECorpus([])
     for split in splits:
-        corpus.extend(load_e2e_csv(os.path.join(directory, f"{split}.csv")))
-    corpus.metadata = {'name': corpus_name,
+        for csv_file in corpus_config.splits[split]:
+            corpus.extend(load_e2e_csv(os.path.join(os.path.dirname(__file__), corpus_config.load_dir, f"{csv_file}")))
+    corpus.metadata = {'name': corpus_config.display_name,
                        'splits': splits,
-                       'directory': directory}
+                       'directory': corpus_config.load_dir}
     return corpus
